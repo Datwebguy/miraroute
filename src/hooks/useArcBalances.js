@@ -6,7 +6,7 @@ export function useArcBalances(address) {
   const { data: usdcNative, refetch: refetchUsdc } = useBalance({
     address,
     chainId: arcTestnet.id,
-    query: { enabled: !!address },
+    query: { enabled: !!address, refetchInterval: 8000 },
   });
 
   const { data: eurcRaw, refetch: refetchEurc } = useReadContract({
@@ -15,7 +15,7 @@ export function useArcBalances(address) {
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     chainId: arcTestnet.id,
-    query: { enabled: !!address },
+    query: { enabled: !!address, refetchInterval: 8000 },
   });
 
   const refetch = () => { refetchUsdc(); refetchEurc(); };

@@ -57,7 +57,7 @@ function ActivityRow({ tx }) {
   );
 }
 
-const CHANGES = { USDC: 0.01, EURC: 0.02, QIE: 2.4, QUSDT: 0.02, QETH: -1.2, QBTC: 3.1, qSOL: -0.6, MIRA: 8.7 };
+const CHANGES = { USDC: 0.01, EURC: 0.02, USDT: 0.02, WETH: -1.2, WBTC: 3.1, wSOL: -0.6, MIRA: 8.7 };
 
 function Spark({ up }) {
   const d = up

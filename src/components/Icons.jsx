@@ -1,4 +1,4 @@
-// Icons.jsx — minimalist line-style SVG icon system + MiraRoute logo
+// Icons.jsx — icon system, MiraRoute MR logo, token logos, social icons
 
 const Icon = ({ d, size = 16, stroke = 'currentColor', fill = 'none', sw = 1.75, className = '' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke}
@@ -32,81 +32,74 @@ export const Icons = {
   Dot:          (p) => <Icon {...p} d={<circle cx="12" cy="12" r="3" fill="currentColor" />} sw={0} />,
   Flag:         (p) => <Icon {...p} d={<g><path d="M4 21V4"/><path d="M4 4h13l-2 4 2 4H4"/></g>} />,
   Sparkle:      (p) => <Icon {...p} d={<g><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/></g>} />,
+  // Theme toggle
+  Sun:          (p) => <Icon {...p} d={<g><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></g>} />,
+  Moon:         (p) => <Icon {...p} d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />,
+  // Social
+  Twitter:      (p) => <Icon {...p} d={<g><path d="M4 4l16 16M20 4 4 20"/></g>} />,
+  Github:       (p) => <Icon {...p} d={<g><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></g>} />,
+  Telegram:     (p) => <Icon {...p} d={<g><path d="M21.5 4.5L2.5 11l7 2M21.5 4.5l-5.5 15-4-6M21.5 4.5L9.5 13m0 0l2 5.5"/></g>} />,
+  Book:         (p) => <Icon {...p} d={<g><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></g>} />,
 };
 
-// MiraRoute logo — "M" monogram with teal-to-white gradient and route dots
-export const Logo = ({ size = 28 }) => (
-  <svg width={size} height={size} viewBox="0 0 40 40" fill="none">
-    <defs>
-      <linearGradient id="lgGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#2DD4BF" />
-        <stop offset="1" stopColor="#FFFFFF" />
-      </linearGradient>
-    </defs>
-    <rect x="1" y="1" width="38" height="38" rx="10" stroke="url(#lgGrad)" strokeWidth="1.5" opacity=".55"/>
-    <path d="M9 28 L9 12 L15 12 L20 20 L25 12 L31 12 L31 28"
-          stroke="url(#lgGrad)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-    <circle cx="9"  cy="28" r="1.8" fill="#2DD4BF"/>
-    <circle cx="31" cy="28" r="1.8" fill="#FFFFFF"/>
-  </svg>
-);
-
-// Token logo — drawn with SVG (no external image assets)
-export const TokenLogo = ({ sym, size = 28 }) => {
-  const TOKENS_MAP = {
-    QIE:   { color: '#2DD4BF' },
-    QUSDC: { color: '#5EEAD4' },
-    QUSDT: { color: '#6EE7B7' },
-    QETH:  { color: '#93C5FD' },
-    QBTC:  { color: '#FCD34D' },
-    qSOL:  { color: '#C4B5FD' },
-    MIRA:  { color: '#FFFFFF' },
-  };
-  const t = TOKENS_MAP[sym];
-  if (!t) return null;
-  const s = size;
+// MiraRoute "MR" logo — M + teal route arrow + R
+export const Logo = ({ size = 32 }) => {
+  const w = size;
+  const h = Math.round(size * 0.65);
   return (
-    <div className="relative flex items-center justify-center rounded-full flex-shrink-0"
-         style={{ width: s, height: s,
-                  background: `radial-gradient(circle at 30% 30%, ${t.color}33, #0D1B2A 70%)`,
-                  boxShadow: `inset 0 0 0 1px ${t.color}55` }}>
-      <svg width={s} height={s} viewBox="0 0 32 32">
-        <defs>
-          <linearGradient id={`tg-${sym}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor={t.color} />
-            <stop offset="1" stopColor="#FFFFFF" stopOpacity=".7"/>
-          </linearGradient>
-        </defs>
-        {sym === 'QIE' && <g>
-          <circle cx="16" cy="16" r="9" stroke={`url(#tg-${sym})`} strokeWidth="2" fill="none"/>
-          <path d="M20 20 L24 24" stroke={`url(#tg-${sym})`} strokeWidth="2" strokeLinecap="round"/>
-        </g>}
-        {sym === 'QUSDC' && <g>
-          <circle cx="16" cy="16" r="10" fill="none" stroke={`url(#tg-${sym})`} strokeWidth="2"/>
-          <text x="16" y="20" textAnchor="middle" fontSize="10" fontWeight="700" fill={`url(#tg-${sym})`} fontFamily="Inter">$</text>
-        </g>}
-        {sym === 'QUSDT' && <g>
-          <circle cx="16" cy="16" r="10" fill="none" stroke={`url(#tg-${sym})`} strokeWidth="2"/>
-          <path d="M11 12h10M16 12v10" stroke={`url(#tg-${sym})`} strokeWidth="2" strokeLinecap="round"/>
-        </g>}
-        {sym === 'QETH' && <g>
-          <path d="M16 6 L22 16 L16 19 L10 16 Z" stroke={`url(#tg-${sym})`} strokeWidth="1.6" fill="none"/>
-          <path d="M16 21 L22 17 L16 26 L10 17 Z" stroke={`url(#tg-${sym})`} strokeWidth="1.6" fill="none"/>
-        </g>}
-        {sym === 'QBTC' && <g>
-          <circle cx="16" cy="16" r="10" fill="none" stroke={`url(#tg-${sym})`} strokeWidth="2"/>
-          <text x="16" y="20" textAnchor="middle" fontSize="10" fontWeight="700" fill={`url(#tg-${sym})`} fontFamily="Inter">฿</text>
-        </g>}
-        {sym === 'qSOL' && <g>
-          <path d="M8 11 L22 11 L19 14 L5 14 Z" fill={`url(#tg-${sym})`} opacity=".9"/>
-          <path d="M5 16 L19 16 L22 19 L8 19 Z" fill={`url(#tg-${sym})`} opacity=".7"/>
-          <path d="M8 21 L22 21 L19 24 L5 24 Z" fill={`url(#tg-${sym})`} opacity=".5"/>
-        </g>}
-        {sym === 'MIRA' && <g>
-          <path d="M8 22 L8 10 L12 10 L16 16 L20 10 L24 10 L24 22"
-                stroke={`url(#tg-${sym})`} strokeWidth="2" strokeLinejoin="round" fill="none"/>
-        </g>}
-      </svg>
+    <svg width={w} height={h} viewBox="0 0 160 104" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="mrLogoG" x1="42" y1="56" x2="116" y2="38" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#2DD4BF"/>
+          <stop offset="1" stopColor="#A7F3D0"/>
+        </linearGradient>
+      </defs>
+      {/* M */}
+      <path d="M6 96 L6 14 Q26 14 42 56 Q58 14 78 14 L78 96"
+            stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* Teal route arrow */}
+      <path d="M42 56 C54 82 70 80 82 68 C90 59 96 50 104 42"
+            stroke="url(#mrLogoG)" strokeWidth="8" strokeLinecap="round"/>
+      {/* Arrow head */}
+      <path d="M97 34 L106 43 L95 49"
+            stroke="url(#mrLogoG)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* R */}
+      <path d="M120 96 L120 14 L146 14 Q158 14 158 34 Q158 54 146 54 L120 54 M138 54 L156 96"
+            stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+};
+
+// Token logos — circle-based with symbol character
+export const TokenLogo = ({ sym, size = 28 }) => {
+  const MAP = {
+    USDC:  { color: '#2775CA', label: '$',  bg: '#1A3A6B' },
+    EURC:  { color: '#2DD4BF', label: '€',  bg: '#0D3B35' },
+    USDT:  { color: '#26A17B', label: '₮',  bg: '#0D3527' },
+    WETH:  { color: '#93C5FD', label: 'Ξ',  bg: '#1A2748' },
+    WBTC:  { color: '#F7931A', label: '₿',  bg: '#3D2410' },
+    wSOL:  { color: '#9945FF', label: '◎',  bg: '#23104A' },
+    MIRA:  { color: '#E6EDF5', label: 'M',  bg: '#1A2535' },
+    ETH:   { color: '#93C5FD', label: 'Ξ',  bg: '#1A2748' },
+    SOL:   { color: '#9945FF', label: '◎',  bg: '#23104A' },
+    ARB:   { color: '#5EEAD4', label: 'A',  bg: '#0D3535' },
+    BNB:   { color: '#FCD34D', label: 'B',  bg: '#3D3510' },
+  };
+  const t = MAP[sym];
+  const color = t?.color ?? 'rgba(255,255,255,0.4)';
+  const bg    = t?.bg    ?? '#111B2A';
+  const label = t?.label ?? (sym?.slice(0, 1) ?? '?');
+  const fontSize = size * 0.38;
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: `radial-gradient(circle at 35% 35%, ${bg}, #0D1B2A 80%)`,
+      boxShadow: `inset 0 0 0 1.5px ${color}55`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize, color, fontWeight: 700, fontFamily: 'DM Mono, monospace',
+      userSelect: 'none',
+    }}>
+      {label}
     </div>
   );
 };
