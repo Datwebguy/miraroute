@@ -37,7 +37,7 @@ export default function DocsView({ onLaunchSwap }) {
           MiraRoute <span className="grad-text font-semibold">Docs</span>
         </h1>
         <p className="text-white/55 text-[15px] leading-relaxed max-w-xl">
-          MiraRoute is a USDC-native DEX aggregator built on Arc Testnet for the QIE Blockchain Hackathon 2026.
+          MiraRoute is a USDC-native DEX aggregator built natively on the Arc ecosystem.
           It uses Circle's App Kit to execute on-chain swaps and CCTP cross-chain transfers.
         </p>
       </div>
