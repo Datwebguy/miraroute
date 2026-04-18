@@ -106,12 +106,15 @@ export default function App() {
       showToast(`Swapped ${amount} ${fromSym} → ${fmt(amountOut, 4)} ${toSym} on Arc`);
     } catch (err) {
       setSwapState('idle');
-      const msg = String(err?.message ?? '');
-      showToast(
-        msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
-          ? 'Transaction rejected by wallet'
-          : 'Swap failed — check balance and try again'
-      );
+      const msg = String(err?.message ?? err ?? '');
+      console.error('[MiraRoute swap error]', err);
+      if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
+        showToast('Transaction rejected by wallet');
+      } else if (msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('network')) {
+        showToast('Circle API unreachable — check your connection or Vercel env vars');
+      } else {
+        showToast(msg ? `Swap failed: ${msg.slice(0, 80)}` : 'Swap failed — check wallet is on Arc Testnet');
+      }
     }
   };
 

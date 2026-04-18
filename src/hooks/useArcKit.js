@@ -3,7 +3,12 @@ import { useAccount } from "wagmi";
 import { AppKit, Blockchain } from "@circle-fin/app-kit";
 import { createAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 
-const kit = new AppKit();
+// Pass API key at construction — required for Circle API calls
+const kit = new AppKit(
+  import.meta.env.VITE_CIRCLE_KIT_KEY
+    ? { apiKey: import.meta.env.VITE_CIRCLE_KIT_KEY }
+    : {}
+);
 
 export function useArcKit() {
   const { connector, isConnected } = useAccount();
@@ -16,24 +21,20 @@ export function useArcKit() {
 
   const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, slippageBps = 50 }) => {
     const adapter = await getAdapter();
-    const config = { slippageBps };
-    if (import.meta.env.VITE_CIRCLE_KIT_KEY) {
-      config.kitKey = import.meta.env.VITE_CIRCLE_KIT_KEY;
-    }
     return kit.swap({
-      from: { adapter, chain: Blockchain.Arc_Testnet },
+      from:     { adapter, chain: Blockchain.Arc_Testnet },
       tokenIn,
       tokenOut,
       amountIn: amountIn.toString(),
-      config,
+      config:   { slippageBps },
     });
   }, [getAdapter]);
 
   const bridge = useCallback(async ({ fromChain, toChain, amount, token = "USDC" }) => {
     const adapter = await getAdapter();
     return kit.bridge({
-      from: { adapter, chain: fromChain },
-      to:   { adapter, chain: toChain },
+      from:   { adapter, chain: fromChain },
+      to:     { adapter, chain: toChain },
       amount: amount.toString(),
       token,
     });
