@@ -2,10 +2,10 @@ import { Icons, Logo, TokenLogo } from "../components/Icons";
 import ParallaxOcean from "../components/ParallaxOcean";
 
 const STATS = [
-  { label: 'Total Volume',      value: '$2.4B+',  sub: 'routed on Arc'         },
-  { label: 'Active Users',      value: '84,000+', sub: 'wallets connected'      },
-  { label: 'Avg Settlement',    value: '1.18s',   sub: 'via Arc Testnet'        },
-  { label: 'Gas Savings vs ETH',value: '$15–60',  sub: 'per swap'               },
+  { label: 'Native Gas Token',  value: 'USDC',    sub: 'no ETH needed on Arc'  },
+  { label: 'Avg Settlement',    value: '<2s',      sub: 'via Circle CCTP'       },
+  { label: 'Avg Gas Cost',      value: '~$0.001', sub: 'per swap on Arc'        },
+  { label: 'Live Tokens',       value: '2',       sub: 'USDC + EURC on-chain'  },
 ];
 
 const FEATURES = [
