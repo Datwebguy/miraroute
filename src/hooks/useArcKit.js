@@ -3,12 +3,9 @@ import { useAccount } from "wagmi";
 import { AppKit, Blockchain } from "@circle-fin/app-kit";
 import { createAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 
-// Pass API key at construction — required for Circle API calls
-const kit = new AppKit(
-  import.meta.env.VITE_CIRCLE_KIT_KEY
-    ? { apiKey: import.meta.env.VITE_CIRCLE_KIT_KEY }
-    : {}
-);
+const kit = new AppKit();
+
+const KIT_KEY = import.meta.env.VITE_CIRCLE_KIT_KEY;
 
 export function useArcKit() {
   const { connector, isConnected } = useAccount();
@@ -19,6 +16,7 @@ export function useArcKit() {
     return createAdapterFromProvider({ provider });
   }, [connector]);
 
+  // kitKey is REQUIRED in config for every swap call (Circle SDK validation)
   const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, slippageBps = 50 }) => {
     const adapter = await getAdapter();
     return kit.swap({
@@ -26,7 +24,7 @@ export function useArcKit() {
       tokenIn,
       tokenOut,
       amountIn: amountIn.toString(),
-      config:   { slippageBps },
+      config:   { slippageBps, kitKey: KIT_KEY },
     });
   }, [getAdapter]);
 
