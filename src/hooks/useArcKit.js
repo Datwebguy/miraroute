@@ -3,8 +3,22 @@ import { useAccount } from "wagmi";
 import { AppKit, Blockchain } from "@circle-fin/app-kit";
 import { createAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 
-const kit = new AppKit();
+// Proxy Circle's API through our own domain to avoid browser CORS restrictions.
+// Vercel rewrites /api/circle-proxy/* → https://api.circle.com/*
+if (typeof window !== "undefined" && !window.__circleFetchPatched) {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    if (typeof input === "string" && input.startsWith("https://api.circle.com")) {
+      input = input.replace("https://api.circle.com", "/api/circle-proxy");
+    } else if (input instanceof Request && input.url.startsWith("https://api.circle.com")) {
+      input = new Request(input.url.replace("https://api.circle.com", "/api/circle-proxy"), input);
+    }
+    return _fetch(input, init);
+  };
+  window.__circleFetchPatched = true;
+}
 
+const kit = new AppKit();
 const KIT_KEY = import.meta.env.VITE_CIRCLE_KIT_KEY;
 
 export function useArcKit() {
@@ -16,7 +30,6 @@ export function useArcKit() {
     return createAdapterFromProvider({ provider });
   }, [connector]);
 
-  // kitKey is REQUIRED in config for every swap call (Circle SDK validation)
   const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, slippageBps = 50 }) => {
     const adapter = await getAdapter();
     return kit.swap({
@@ -35,6 +48,7 @@ export function useArcKit() {
       to:     { adapter, chain: toChain },
       amount: amount.toString(),
       token,
+      config: { kitKey: KIT_KEY },
     });
   }, [getAdapter]);
 

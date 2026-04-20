@@ -110,10 +110,8 @@ export default function App() {
       console.error('[MiraRoute swap error]', err);
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
         showToast('Transaction rejected by wallet');
-      } else if (msg.toLowerCase().includes('fetch') || msg.toLowerCase().includes('network')) {
-        showToast('Circle API unreachable — check your connection or Vercel env vars');
       } else {
-        showToast(msg ? `Swap failed: ${msg.slice(0, 80)}` : 'Swap failed — check wallet is on Arc Testnet');
+        showToast(msg ? `Swap error: ${msg.slice(0, 90)}` : 'Swap failed — ensure wallet is on Arc Testnet');
       }
     }
   };
