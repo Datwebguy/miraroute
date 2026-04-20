@@ -68,18 +68,20 @@ html.light-theme [class*="162638"] {
 html.light-theme .text-white { color: var(--fg) !important; }
 html.light-theme .hover\:text-white:hover { color: var(--fg) !important; }
 
-/* Soften text tints in light mode */
-html.light-theme .text-white\/35  { color: rgba(10,22,40,.35)  !important; }
-html.light-theme .text-white\/40  { color: rgba(10,22,40,.40)  !important; }
-html.light-theme .text-white\/45  { color: rgba(10,22,40,.45)  !important; }
-html.light-theme .text-white\/50  { color: rgba(10,22,40,.50)  !important; }
-html.light-theme .text-white\/55  { color: rgba(10,22,40,.55)  !important; }
-html.light-theme .text-white\/60  { color: rgba(10,22,40,.60)  !important; }
-html.light-theme .text-white\/65  { color: rgba(10,22,40,.65)  !important; }
-html.light-theme .text-white\/70  { color: rgba(10,22,40,.70)  !important; }
-html.light-theme .text-white\/75  { color: rgba(10,22,40,.75)  !important; }
-html.light-theme .text-white\/80  { color: rgba(10,22,40,.80)  !important; }
-html.light-theme .text-white\/85  { color: rgba(10,22,40,.85)  !important; }
+/* Light mode: map ALL white-opacity text to solid slate-900 (#0A1628).
+   Labels and hints use 55–70%, primary body text uses 85–100%.
+   No fading — user wants clearly readable black text. */
+html.light-theme .text-white\/35  { color: rgba(10,22,40,.55)  !important; }
+html.light-theme .text-white\/40  { color: rgba(10,22,40,.60)  !important; }
+html.light-theme .text-white\/45  { color: rgba(10,22,40,.65)  !important; }
+html.light-theme .text-white\/50  { color: rgba(10,22,40,.70)  !important; }
+html.light-theme .text-white\/55  { color: rgba(10,22,40,.75)  !important; }
+html.light-theme .text-white\/60  { color: rgba(10,22,40,.82)  !important; }
+html.light-theme .text-white\/65  { color: rgba(10,22,40,.87)  !important; }
+html.light-theme .text-white\/70  { color: rgba(10,22,40,.91)  !important; }
+html.light-theme .text-white\/75  { color: rgba(10,22,40,.94)  !important; }
+html.light-theme .text-white\/80  { color: rgba(10,22,40,.97)  !important; }
+html.light-theme .text-white\/85  { color: rgba(10,22,40,1.00) !important; }
 
 html.light-theme .bg-white\/\[0\.015\],
 html.light-theme .bg-white\/\[0\.02\],
@@ -107,9 +109,13 @@ html.light-theme .shimmer {
   background-size: 800px 100%;
 }
 
-/* Teal text → darker teal in light mode for accessibility */
-html.light-theme .text-teal-300 { color: #0D9488 !important; }
-html.light-theme .text-teal-400 { color: #0D9488 !important; }
+/* Teal text → teal-700 in light mode — passes WCAG AA on white */
+html.light-theme .text-teal-300 { color: #0F766E !important; }
+html.light-theme .text-teal-400 { color: #0F766E !important; }
+html.light-theme .text-teal-300\/\[.*\] { color: #0F766E !important; }
+
+/* Logo SVG uses currentColor — force it to --fg in light mode */
+html.light-theme svg { color: var(--fg); }
 
 html.light-theme header {
   background: rgba(238,244,251,.85);

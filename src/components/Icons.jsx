@@ -56,7 +56,7 @@ export const Logo = ({ size = 32 }) => {
       </defs>
       {/* M */}
       <path d="M6 96 L6 14 Q26 14 42 56 Q58 14 78 14 L78 96"
-            stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
+            stroke="currentColor" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
       {/* Teal route arrow */}
       <path d="M42 56 C54 82 70 80 82 68 C90 59 96 50 104 42"
             stroke="url(#mrLogoG)" strokeWidth="8" strokeLinecap="round"/>
@@ -65,7 +65,7 @@ export const Logo = ({ size = 32 }) => {
             stroke="url(#mrLogoG)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
       {/* R */}
       <path d="M120 96 L120 14 L146 14 Q158 14 158 34 Q158 54 146 54 L120 54 M138 54 L156 96"
-            stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
+            stroke="currentColor" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 };
