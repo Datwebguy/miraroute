@@ -110,7 +110,7 @@ export default function App() {
       if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
         showToast('Transaction rejected by wallet');
       } else {
-        showToast(msg ? `Swap error: ${msg.slice(0, 90)}` : 'Swap failed — ensure wallet is on Arc Testnet');
+        showToast(msg ? `Swap error: ${msg.slice(0, 90)}` : 'Swap failed. Make sure your wallet is on Arc Testnet.');
       }
     }
   };
@@ -156,7 +156,7 @@ export default function App() {
           <div className="text-center mb-8 max-w-2xl anim-fadein">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] card-stroke mb-5">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 pulse-ring"/>
-              <span className="text-[11.5px] mono uppercase tracking-[0.18em] text-white/60">Live on Arc Testnet · USDC native gas</span>
+              <span className="text-[11.5px] mono uppercase tracking-[0.18em] text-white/60">Live on Arc Testnet. USDC native gas.</span>
             </div>
             <h1 className="text-[40px] sm:text-[50px] font-light tracking-[-0.02em] leading-[1.05] hero-glow">
               Swap stablecoins <span className="grad-text font-medium">on Arc</span>

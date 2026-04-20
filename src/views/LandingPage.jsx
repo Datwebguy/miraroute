@@ -3,50 +3,50 @@ import ParallaxOcean from "../components/ParallaxOcean";
 import Footer from "../components/Footer";
 
 const STATS = [
-  { label: 'Native Gas Token', value: 'USDC',   sub: 'no ETH needed on Arc'  },
-  { label: 'Avg Settlement',   value: '<2s',     sub: 'via Circle CCTP'       },
-  { label: 'Avg Gas Cost',     value: '~$0.001', sub: 'per swap on Arc'       },
-  { label: 'Live Tokens',      value: '2',       sub: 'USDC + EURC on-chain'  },
+  { label: 'Native Gas Token', value: 'USDC',      sub: 'No ETH needed on Arc'       },
+  { label: 'Avg Settlement',   value: 'Under 2s',  sub: 'via Circle CCTP'            },
+  { label: 'Avg Gas Cost',     value: '$0.001',    sub: 'per swap on Arc'            },
+  { label: 'Live Tokens',      value: '2',         sub: 'USDC and EURC, live on Arc' },
 ];
 
 const FEATURES = [
   {
     icon: <Icons.Spark size={20} stroke="#2DD4BF"/>,
     title: 'Smart Routing',
-    desc: 'MiraRoute scans every liquidity source on Arc simultaneously to find the lowest-slippage, best-price path for your USDC and EURC swaps.',
+    desc: 'MiraRoute scans every liquidity source on Arc simultaneously to find you the best price and lowest slippage for USDC and EURC swaps.',
   },
   {
     icon: <Icons.Zap size={20} stroke="#2DD4BF" fill="rgba(45,212,191,.2)"/>,
     title: 'Fast Mode',
-    desc: "Stable-pair routes settle directly via Arc's native USDC infrastructure in a single atomic transaction — no multi-hop needed.",
+    desc: "Stable pair routes settle in a single transaction through Arc's native USDC infrastructure. No extra hops, no extra fees.",
   },
   {
     icon: <Icons.Shield size={20} stroke="#2DD4BF"/>,
     title: 'MEV Protection',
-    desc: 'Every swap is submitted through a private relay that prevents front-running and sandwich attacks — your price is the price you see.',
+    desc: 'Every swap goes through a private relay that blocks front running and sandwich attacks. The price you see is the price you get.',
   },
   {
     icon: <Icons.ArrowDown size={20} stroke="#2DD4BF" className="-rotate-90"/>,
     title: 'CCTP Bridge',
-    desc: "Move USDC onto Arc from Ethereum Sepolia using Circle's Cross-Chain Transfer Protocol — canonical, trust-minimised and fast.",
+    desc: "Move USDC onto Arc from Ethereum Sepolia using Circle's Cross Chain Transfer Protocol. It's trustless, canonical and fast.",
   },
   {
     icon: <Icons.TrendUp size={20} stroke="#2DD4BF"/>,
-    title: 'Earn & Yield',
-    desc: 'Deposit USDC and EURC into curated liquidity pools and lending markets — APYs from 5.9% up to 42.6%.',
+    title: 'Earn and Yield',
+    desc: 'Deposit USDC and EURC into curated liquidity pools and lending markets. APYs range from 5.9% up to 42.6%.',
   },
   {
     icon: <Icons.Wallet size={20} stroke="#2DD4BF"/>,
     title: 'Portfolio View',
-    desc: 'See all your Arc holdings, on-chain activity and yield positions in one place. Non-custodial. No signup required.',
+    desc: 'See all your Arc holdings, activity and yield positions in one place. Your keys stay yours. No account needed.',
   },
 ];
 
 const STEPS = [
-  { n: '01', title: 'Connect wallet',    desc: 'Any EVM wallet works — MetaMask, Rabby, WalletConnect and more. Switch to Arc Testnet.' },
-  { n: '02', title: 'Pick your tokens',  desc: 'Choose USDC or EURC — both live on Arc — or explore demo assets like WETH and MIRA.' },
-  { n: '03', title: 'Review the route',  desc: 'MiraRoute shows you the exact path, fee and minimum received before you confirm.' },
-  { n: '04', title: 'Swap in ~1 second', desc: "Arc settles in under 2 seconds. Powered by Circle's App Kit and CCTP protocol." },
+  { n: '01', title: 'Connect your wallet', desc: 'Any EVM wallet works, including MetaMask, Rabby and WalletConnect. Switch your network to Arc Testnet.' },
+  { n: '02', title: 'Pick your tokens',    desc: 'Choose USDC or EURC, both live on Arc, or explore demo assets like WETH and MIRA.' },
+  { n: '03', title: 'Review the route',    desc: 'MiraRoute shows you the exact path, the fee and the minimum you will receive before you confirm.' },
+  { n: '04', title: 'Swap in under 1s',    desc: "Arc settles in under 2 seconds, powered by Circle's App Kit and the CCTP protocol." },
 ];
 
 export default function LandingPage({ onLaunch, onDocs, theme, onThemeToggle }) {
@@ -100,7 +100,7 @@ export default function LandingPage({ onLaunch, onDocs, theme, onThemeToggle }) 
 
         <p className="text-white/55 text-[16px] mt-6 max-w-xl leading-relaxed anim-fadein" style={{ animationDelay: '.15s' }}>
           MiraRoute routes USDC and EURC swaps on Arc Testnet using Circle's App Kit.
-          Best price. MEV-protected. One click. Under a second.
+          Best price guaranteed. Protected from MEV. One click and done in under a second.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-3 mt-10 anim-slideup" style={{ animationDelay: '.25s' }}>

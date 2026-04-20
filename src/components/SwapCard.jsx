@@ -153,9 +153,9 @@ export function AdvancedSettings({ open, onToggle, slippage, onSlippage, gas, on
             <div className="text-[12px] text-white/60 mb-2 flex items-center gap-1.5">Transaction speed <Icons.Info size={11} className="text-white/30"/></div>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { k: 'standard', label: 'Standard', fee: '$0.004', eta: '~2s'  },
-                { k: 'fast',     label: 'Fast',     fee: '$0.011', eta: '~1s'  },
-                { k: 'instant',  label: 'Instant',  fee: '$0.028', eta: '<1s'  },
+                { k: 'standard', label: 'Standard', fee: '$0.004', eta: 'under 2s' },
+                { k: 'fast',     label: 'Fast',     fee: '$0.011', eta: 'under 1s' },
+                { k: 'instant',  label: 'Instant',  fee: '$0.028', eta: 'instant'  },
               ].map(o => (
                 <button key={o.k} onClick={() => onGas(o.k)}
                         className={`p-2.5 rounded-lg text-left card-stroke ${gas === o.k ? 'bg-teal-400/10' : 'bg-white/[0.02] hover:bg-white/[0.04]'}`}
@@ -214,7 +214,7 @@ export default function SwapCard({
   const canSwap = isConnected && amountNum > 0 && !insufficient && swapState === 'idle' && isLivePair;
   const btnLabel =
     !isConnected              ? 'Connect wallet'
-    : !isLivePair && amountNum > 0 ? 'Demo — only USDC & EURC on Arc'
+    : !isLivePair && amountNum > 0 ? 'Demo only. Live swaps need USDC or EURC.'
     : amountNum === 0         ? 'Enter an amount'
     : insufficient            ? `Insufficient ${fromSym}`
     : fastMode                ? 'Swap via Fast Mode'
@@ -290,7 +290,7 @@ export default function SwapCard({
         </div>
 
         <div className="flex items-center justify-between text-[11px] mono text-white/35 px-1">
-          <span className="flex items-center gap-1.5"><Icons.Lock size={10}/> Non-custodial · MEV shield on</span>
+          <span className="flex items-center gap-1.5"><Icons.Lock size={10}/> Your keys, your coins. MEV shield active.</span>
           <span>Quote refreshes in 12s</span>
         </div>
       </div>

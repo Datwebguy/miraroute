@@ -77,7 +77,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
       setBridgeErr(
         msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
           ? 'Transaction rejected by wallet'
-          : err?.message ?? 'Bridge failed — please try again'
+          : err?.message ?? 'Bridge failed. Please try again.'
       );
       setStep(0);
     }
@@ -150,8 +150,8 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11.5px] mono"
              style={{ background: 'rgba(45,212,191,.06)', boxShadow: 'inset 0 0 0 1px rgba(45,212,191,.2)' }}>
           <span className="w-1.5 h-1.5 rounded-full bg-teal-400 pulse-ring"/>
-          <span className="text-teal-300">Circle CCTP · canonical cross-chain transfer</span>
-          <span className="text-white/35 ml-auto">~4 min</span>
+          <span className="text-teal-300">Circle CCTP, the standard for moving USDC between chains</span>
+          <span className="text-white/35 ml-auto">about 4 min</span>
         </div>
 
         {/* Amount input */}
@@ -213,7 +213,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
               <div className="text-white/40 text-[11px] mono mb-0.5">Est. time</div>
               <div className="mono font-medium text-teal-300 flex items-center justify-end gap-1">
                 <Icons.Zap size={11} fill="#5EEAD4" stroke="#5EEAD4"/>
-                ~4 min
+                about 4 min
               </div>
             </div>
             <div className="col-span-2">
@@ -296,11 +296,11 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
         {/* CCTP note */}
         <div className="flex items-center gap-1.5 text-[11px] mono text-white/35 px-1">
           <Icons.Info size={11} className="shrink-0"/>
-          CCTP only supports stablecoin bridging. Swap native assets to USDC first.
+          CCTP only bridges stablecoins. To bridge ETH, swap it to USDC on Ethereum first.
         </div>
 
         <div className="flex items-center justify-between text-[10.5px] mono text-white/30 px-1">
-          <span className="flex items-center gap-1.5"><Icons.Shield size={10}/> Canonical · MEV-protected</span>
+          <span className="flex items-center gap-1.5"><Icons.Shield size={10}/> Canonical bridge. Protected from MEV.</span>
           <span>Powered by Circle CCTP</span>
         </div>
       </div>
@@ -308,7 +308,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
       {/* Coming soon chains */}
       <div className="mt-6">
         <div className="text-[11px] mono uppercase tracking-[0.18em] text-white/35 mb-3 px-1">
-          More chains — coming soon
+          More chains coming soon
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {COMING_SOON.map(c => (

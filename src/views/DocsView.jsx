@@ -37,62 +37,62 @@ export default function DocsView({ onLaunchSwap }) {
           MiraRoute <span className="grad-text font-semibold">Docs</span>
         </h1>
         <p className="text-white/55 text-[15px] leading-relaxed max-w-xl">
-          MiraRoute is a USDC-native DEX aggregator built natively on the Arc ecosystem.
-          It uses Circle's App Kit to execute on-chain swaps and CCTP cross-chain transfers.
+          MiraRoute is a USDC-native swap aggregator built on the Arc ecosystem.
+          It uses Circle's App Kit to run real swaps and CCTP transfers between chains.
         </p>
       </div>
 
       <SECTION title="What is MiraRoute?">
         <P>
-          MiraRoute is a decentralised swap aggregator running on <strong className="text-white/90">Arc Testnet</strong> — a
-          blockchain where USDC is the native gas token. It enables users to swap USDC ↔ EURC, bridge USDC from
-          Ethereum Sepolia via Circle's CCTP, and earn yield through Arc liquidity pools.
+          MiraRoute is a decentralised swap aggregator running on <strong className="text-white/90">Arc Testnet</strong>, a
+          blockchain where USDC is the native gas token. You can swap USDC and EURC, bridge USDC from
+          Ethereum Sepolia using Circle's CCTP, and earn yield through Arc liquidity pools.
         </P>
         <P>
-          The app is built without any simulated transactions — every swap and bridge requires a real wallet
-          signature via Circle's App Kit, ensuring all activity is on-chain and verifiable on ArcScan.
+          Every swap and bridge action requires a real wallet signature through Circle's App Kit. There are no
+          simulated transactions. All activity is verifiable on ArcScan.
         </P>
       </SECTION>
 
       <SECTION title="Arc Testnet">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-          <InfoBox label="Chain ID"          value="5042002"                              sub="Add to MetaMask as 'Arc Testnet'" />
-          <InfoBox label="RPC Endpoint"      value="rpc.testnet.arc.network"              sub="Use https:// prefix" />
-          <InfoBox label="Native Gas Token"  value="USDC"                                 sub="No ETH needed — pay gas in USDC" />
+          <InfoBox label="Chain ID"          value="5042002"                              sub="Add to MetaMask as Arc Testnet" />
+          <InfoBox label="RPC Endpoint"      value="rpc.testnet.arc.network"              sub="Use the https prefix" />
+          <InfoBox label="Native Gas Token"  value="USDC"                                 sub="No ETH needed. Pay gas in USDC." />
           <InfoBox label="Block Explorer"    value="testnet.arcscan.app"                  sub="View transactions and contracts" />
-          <InfoBox label="USDC Decimals"     value="6 (transfers) / 18 (gas)"             sub="Standard ERC-20 transfer uses 6dp" />
-          <InfoBox label="Settlement Speed"  value="< 2 seconds"                          sub="Fast finality, ideal for stablecoins" />
+          <InfoBox label="USDC Decimals"     value="6 transfers / 18 gas"                 sub="Standard ERC-20 transfers use 6 decimals" />
+          <InfoBox label="Settlement Speed"  value="Under 2 seconds"                      sub="Fast finality, ideal for stablecoins" />
         </div>
         <P>
-          Arc is an EVM-compatible chain optimised for stablecoin use cases. USDC is the native gas asset,
-          meaning wallets need USDC (not ETH) to pay transaction fees.
+          Arc is an EVM-compatible chain built for stablecoin use cases. USDC is the native gas asset,
+          which means your wallet needs USDC, not ETH, to pay for transactions.
         </P>
       </SECTION>
 
       <SECTION title="Supported Tokens">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <InfoBox label="USDC — Live"  value="USD Coin"    sub="Native gas + transfer token. Circle-issued." />
-          <InfoBox label="EURC — Live"  value="Euro Coin"   sub="Euro-pegged stablecoin. Circle-issued." />
-          <InfoBox label="WETH — Demo"  value="Wrapped ETH" sub="Demo only. Real swap requires live pair." />
-          <InfoBox label="WBTC — Demo"  value="Wrapped BTC" sub="Demo only. Real swap requires live pair." />
-          <InfoBox label="wSOL — Demo"  value="Wrapped SOL" sub="Demo only. Real swap requires live pair." />
-          <InfoBox label="MIRA — Demo"  value="MiraRoute"   sub="Protocol token. Not yet live on-chain." />
+          <InfoBox label="USDC (Live)"  value="USD Coin"    sub="Native gas and transfer token. Issued by Circle." />
+          <InfoBox label="EURC (Live)"  value="Euro Coin"   sub="Euro-pegged stablecoin. Issued by Circle." />
+          <InfoBox label="WETH (Demo)"  value="Wrapped ETH" sub="Demo only. Real swaps need a live pair." />
+          <InfoBox label="WBTC (Demo)"  value="Wrapped BTC" sub="Demo only. Real swaps need a live pair." />
+          <InfoBox label="wSOL (Demo)"  value="Wrapped SOL" sub="Demo only. Real swaps need a live pair." />
+          <InfoBox label="MIRA (Demo)"  value="MiraRoute"   sub="Protocol token. Not yet live on Arc." />
         </div>
         <P>
-          Only <strong className="text-white/90">USDC and EURC</strong> are live on Arc Testnet. Swaps for demo tokens are
-          disabled — the swap button shows "Demo — only USDC &amp; EURC on Arc" for non-live pairs.
+          Only <strong className="text-white/90">USDC and EURC</strong> are live on Arc Testnet right now. Swaps for demo tokens are
+          disabled and the swap button will let you know when a pair is not live yet.
         </P>
       </SECTION>
 
       <SECTION title="How Swaps Work">
         <P>
-          Swaps use Circle's App Kit (<Code>@circle-fin/app-kit</Code>) via the <Code>arcKit.swap()</Code> method.
-          The wallet must be connected to Arc Testnet (Chain ID <Code>5042002</Code>). When you click "Confirm Swap",
-          your wallet prompts for a signature — no simulation fallback exists.
+          Swaps use Circle's App Kit (<Code>@circle-fin/app-kit</Code>) through the <Code>arcKit.swap()</Code> method.
+          Your wallet must be on Arc Testnet (Chain ID <Code>5042002</Code>). When you click Confirm Swap,
+          your wallet will ask for a signature. There is no simulation or fallback mode.
         </P>
         <P>
-          After a successful swap, the transaction hash is stored and shown in a success overlay with a direct
-          link to <Code>testnet.arcscan.app/tx/{'{'+'hash'+'}'}</Code>. Balances are refetched from the chain automatically
+          After a successful swap, the transaction hash is saved and shown in a confirmation screen with a direct
+          link to <Code>testnet.arcscan.app/tx/hash</Code>. Your balance is refreshed from the chain automatically
           after every confirmed transaction.
         </P>
         <div className="rounded-xl bg-white/[0.03] card-stroke p-4 mt-2">
@@ -113,48 +113,48 @@ export default function DocsView({ onLaunchSwap }) {
 
       <SECTION title="CCTP Bridge">
         <P>
-          The Bridge tab supports one live route: <strong className="text-white/90">Ethereum Sepolia → Arc Testnet</strong> for USDC,
-          using Circle's Cross-Chain Transfer Protocol (CCTP). This is a canonical, trust-minimised burn-and-mint
-          mechanism — USDC is burned on Sepolia and natively minted on Arc.
+          The Bridge tab has one live route: <strong className="text-white/90">Ethereum Sepolia to Arc Testnet</strong> for USDC,
+          using Circle's Cross Chain Transfer Protocol (CCTP). USDC is burned on Sepolia and minted natively on Arc.
+          It is a trustless, canonical mechanism with no third-party custody.
         </P>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-3">
-          <InfoBox label="From"     value="Ethereum Sepolia" sub="Burn USDC — requires Sepolia ETH for gas" />
-          <InfoBox label="Protocol" value="Circle CCTP"      sub="Canonical cross-chain standard" />
+          <InfoBox label="From"     value="Ethereum Sepolia" sub="Burns USDC. Requires Sepolia ETH for gas." />
+          <InfoBox label="Protocol" value="Circle CCTP"      sub="The standard for moving USDC between chains" />
           <InfoBox label="To"       value="Arc Testnet"      sub="Receive native USDC on Arc" />
         </div>
         <P>
-          Other chains (BNB, Arbitrum, Base, Solana) are shown as "Coming Soon" in the Bridge UI.
-          The bridge fee is approximately $1.20 and takes ~4 minutes end-to-end.
+          Other chains like BNB, Arbitrum, Base and Solana are listed as coming soon in the Bridge tab.
+          The bridge fee is approximately $1.20 and the transfer takes about 4 minutes to complete.
         </P>
       </SECTION>
 
       <SECTION title="Earn">
         <P>
-          The Earn tab lists curated yield opportunities on Arc — LP pools, stablecoin lending, and staking.
-          All pools are non-custodial and settled on Arc Testnet. APYs range from 5.9% (USDC Lending) to
-          42.6% (MIRA/USDC LP). Deposits require a wallet signature via the deposit modal.
+          The Earn tab lists curated yield opportunities on Arc, including LP pools, stablecoin lending and staking.
+          You stay in full control of your funds throughout. APYs range from 5.9% for USDC Lending up to
+          42.6% for the MIRA/USDC LP. Deposits require a wallet signature through the deposit modal.
         </P>
       </SECTION>
 
       <SECTION title="Tech Stack">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <InfoBox label="Frontend"         value="React + Vite"              sub="Tailwind CSS, DM Mono font" />
-          <InfoBox label="Wallet"           value="RainbowKit + wagmi v2"     sub="EVM wallet connection" />
-          <InfoBox label="Swap/Bridge"      value="Circle App Kit v1.3.0"     sub="@circle-fin/app-kit" />
-          <InfoBox label="On-chain reads"   value="wagmi useBalance / useReadContract" sub="Live balance polling every 8s" />
-          <InfoBox label="Chain"            value="Arc Testnet (5042002)"     sub="EVM-compatible, USDC gas" />
-          <InfoBox label="Explorer"         value="ArcScan"                   sub="testnet.arcscan.app" />
+          <InfoBox label="Frontend"       value="React and Vite"             sub="Tailwind CSS, DM Mono font" />
+          <InfoBox label="Wallet"         value="RainbowKit and wagmi v2"    sub="EVM wallet connection" />
+          <InfoBox label="Swap and Bridge" value="Circle App Kit v1.3.0"    sub="@circle-fin/app-kit" />
+          <InfoBox label="Balance reads"  value="wagmi hooks"                sub="Live balance polling every 8 seconds" />
+          <InfoBox label="Chain"          value="Arc Testnet (5042002)"      sub="EVM-compatible with USDC gas" />
+          <InfoBox label="Explorer"       value="ArcScan"                    sub="testnet.arcscan.app" />
         </div>
       </SECTION>
 
-      <SECTION title="Links & Resources">
+      <SECTION title="Links and Resources">
         <div className="flex flex-wrap gap-3">
           {[
-            { label: 'Arc Testnet Explorer', href: 'https://testnet.arcscan.app' },
-            { label: 'Circle App Kit',       href: 'https://developers.circle.com/w3s/docs/circle-app-kit' },
-            { label: 'GitHub — MiraRoute',   href: 'https://github.com/Datwebguy/miraroute' },
+            { label: 'Arc Testnet Explorer',  href: 'https://testnet.arcscan.app' },
+            { label: 'Circle App Kit',        href: 'https://developers.circle.com/w3s/docs/circle-app-kit' },
+            { label: 'MiraRoute on GitHub',   href: 'https://github.com/Datwebguy/miraroute' },
             { label: '@Datweb3guy (Founder)', href: 'https://x.com/Datweb3guy' },
-            { label: '@miraroute (Project)', href: 'https://x.com/miraroute' },
+            { label: '@miraroute (Project)',  href: 'https://x.com/miraroute' },
           ].map(l => (
             <a key={l.label} href={l.href} target="_blank" rel="noreferrer"
                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.07] card-stroke text-[13px] text-white/70 hover:text-white transition">

@@ -134,7 +134,7 @@ export default function EarnView({ onDeposit, balances }) {
             Put your USDC to <span className="grad-text font-medium">work</span>
           </h1>
           <p className="text-white/55 text-[13.5px] mt-2 max-w-lg">
-            Curated yield opportunities across Arc pools, stable rails and USDC staking. All positions non-custodial, settled on Arc Testnet.
+            Curated yield opportunities across Arc pools, stable rails and USDC staking. You stay in full control of your funds at all times.
           </p>
         </div>
         <div className="flex gap-4 shrink-0">

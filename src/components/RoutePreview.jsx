@@ -93,7 +93,7 @@ export default function RoutePreview({ open, onToggle, fromSym, toSym, amountIn,
 
           <div className="flex items-center gap-2 text-[11px] mono text-white/40">
             <Icons.Shield size={12} className="text-white/50"/>
-            <span>Route audited · MEV-protected · Settles in ~1.2s on Arc</span>
+            <span>Audited route. Protected from MEV. Settles in about 1 second on Arc.</span>
           </div>
         </div>
       </div>

@@ -27,7 +27,7 @@ export default function Navbar({ tab, onTab, onHome, theme, onThemeToggle }) {
           <Logo size={36}/>
           <div className="leading-none text-left hidden sm:block">
             <div className="text-[16px] font-semibold tracking-tight">MiraRoute</div>
-            <div className="text-[10px] mono text-white/40 uppercase tracking-[0.18em] mt-0.5">On Arc</div>
+            <div className="text-[10px] mono text-white/40 uppercase tracking-[0.18em] mt-0.5">on Arc</div>
           </div>
         </button>
 
@@ -58,7 +58,7 @@ export default function Navbar({ tab, onTab, onHome, theme, onThemeToggle }) {
           {isConnected && usdcAmt != null
             ? <span className="text-white/85">{fmt(usdcAmt, 4)}</span>
             : <span className="text-white/85">Arc Testnet</span>}
-          <span className="text-teal-400">Live</span>
+          <span className="text-teal-400 font-medium">Live</span>
         </div>
 
         {/* Dark / Light toggle */}
