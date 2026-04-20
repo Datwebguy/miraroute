@@ -130,7 +130,7 @@ export default function LandingPage({ onLaunch, onDocs, theme, onThemeToggle }) 
               {t.sym}
               {t.live
                 ? <span className="text-[8px] mono uppercase px-1 rounded" style={{ background: 'rgba(45,212,191,.2)', color: '#2DD4BF' }}>live</span>
-                : <span className="text-[8px] mono uppercase px-1 rounded" style={{ background: 'rgba(255,255,255,.06)', color: 'rgba(255,255,255,.35)' }}>demo</span>
+                : <span className="demo-badge text-[8px] mono uppercase px-1 rounded" style={{ background: 'rgba(255,255,255,.06)', color: 'rgba(255,255,255,.35)' }}>demo</span>
               }
             </div>
           ))}

@@ -12,7 +12,7 @@ function LiveBadge({ live }) {
     </span>
   );
   return (
-    <span className="text-[9px] mono uppercase tracking-wider px-1.5 py-0.5 rounded"
+    <span className="demo-badge text-[9px] mono uppercase tracking-wider px-1.5 py-0.5 rounded"
           style={{ background: 'rgba(255,255,255,.06)', color: 'rgba(255,255,255,.4)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.08)' }}>
       DEMO
     </span>

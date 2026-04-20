@@ -45,7 +45,7 @@ export default function TokenSelector({ open, onClose, onPick, exclude, balances
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <div className="text-[14px] font-medium">{t.sym}</div>
-                  <div className={`text-[9.5px] mono uppercase tracking-wider px-1.5 py-0.5 rounded ${t.live ? 'text-teal-300' : 'text-white/40 bg-white/5'}`}
+                  <div className={`text-[9.5px] mono uppercase tracking-wider px-1.5 py-0.5 rounded ${t.live ? 'text-teal-300' : 'demo-badge text-white/40 bg-white/5'}`}
                        style={t.live ? { background: 'rgba(45,212,191,.15)', boxShadow: 'inset 0 0 0 1px rgba(45,212,191,.3)' } : {}}>
                     {t.tag}
                   </div>

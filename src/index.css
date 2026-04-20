@@ -36,91 +36,134 @@ html.light-theme {
 /* ── Light-theme overrides ─────────────────────────────────────── */
 html.light-theme .parallax-layer { opacity: var(--ocean-op) !important; }
 
-html.light-theme .card-stroke { box-shadow: inset 0 0 0 1px var(--border) !important; }
-html.light-theme .input-stroke { box-shadow: inset 0 0 0 1px var(--border-in) !important; }
+/* ── Gradient text: dark teal in light mode (teal-to-white is invisible on white) ── */
+html.light-theme .grad-text {
+  background: linear-gradient(135deg, #0D9488 0%, #065F46 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+}
+
+/* grad-teal icon badges: remove white endpoint so they stay visible on white */
+html.light-theme .grad-teal {
+  background: linear-gradient(135deg, #2DD4BF 0%, #A7F3D0 100%);
+}
+
+/* ── Cards: solid white with depth (replacing near-transparent white-on-white) ── */
+html.light-theme .card-stroke {
+  box-shadow: 0 2px 12px rgba(10,22,40,.07), 0 0 0 1px rgba(10,22,40,.10) !important;
+}
+html.light-theme .input-stroke {
+  box-shadow: 0 0 0 1px rgba(10,22,40,.12) !important;
+}
 
 html.light-theme .swap-glass {
-  background: var(--bg-card) !important;
-  box-shadow: inset 0 0 0 1px var(--border), 0 12px 48px -8px rgba(0,0,0,.12) !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 40px rgba(10,22,40,.10), 0 0 0 1px rgba(10,22,40,.08) !important;
 }
 html.light-theme .input-glass {
-  background: var(--bg-input) !important;
+  background: rgba(10,22,40,.03) !important;
 }
 html.light-theme .earn-card-bg,
 html.light-theme .bridge-card-bg,
 html.light-theme .portfolio-card-bg {
-  background: var(--bg-card) !important;
-  box-shadow: inset 0 0 0 1px var(--border) !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 12px rgba(10,22,40,.07), 0 0 0 1px rgba(10,22,40,.09) !important;
 }
 
-/* Override ALL hardcoded dark hex card backgrounds via attribute substring matching */
+/* Override hardcoded dark hex card backgrounds */
 html.light-theme [class*="0F1E2E"] {
-  background: var(--bg-card) !important;
-  box-shadow: inset 0 0 0 1px var(--border), 0 8px 32px rgba(0,0,0,.06) !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 20px rgba(10,22,40,.09), 0 0 0 1px rgba(10,22,40,.09) !important;
 }
 html.light-theme [class*="0C1822"],
 html.light-theme [class*="162638"] {
-  background: rgba(0,0,0,.05) !important;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08) !important;
+  background: rgba(10,22,40,.05) !important;
+  box-shadow: 0 0 0 1px rgba(10,22,40,.08) !important;
 }
 
-/* Pure text-white (no opacity modifier) */
-html.light-theme .text-white { color: var(--fg) !important; }
-html.light-theme .hover\:text-white:hover { color: var(--fg) !important; }
+/* shadow-card: replace dark 0.4 opacity shadow with a soft daylight shadow */
+html.light-theme .shadow-card {
+  box-shadow: 0 4px 24px rgba(10,22,40,.10) !important;
+}
 
-/* Light mode: map ALL white-opacity text to solid slate-900 (#0A1628).
-   Labels and hints use 55–70%, primary body text uses 85–100%.
-   No fading — user wants clearly readable black text. */
-html.light-theme .text-white\/35  { color: rgba(10,22,40,.55)  !important; }
-html.light-theme .text-white\/40  { color: rgba(10,22,40,.60)  !important; }
-html.light-theme .text-white\/45  { color: rgba(10,22,40,.65)  !important; }
-html.light-theme .text-white\/50  { color: rgba(10,22,40,.70)  !important; }
-html.light-theme .text-white\/55  { color: rgba(10,22,40,.75)  !important; }
-html.light-theme .text-white\/60  { color: rgba(10,22,40,.82)  !important; }
-html.light-theme .text-white\/65  { color: rgba(10,22,40,.87)  !important; }
-html.light-theme .text-white\/70  { color: rgba(10,22,40,.91)  !important; }
-html.light-theme .text-white\/75  { color: rgba(10,22,40,.94)  !important; }
-html.light-theme .text-white\/80  { color: rgba(10,22,40,.97)  !important; }
-html.light-theme .text-white\/85  { color: rgba(10,22,40,1.00) !important; }
-
+/* ── Transparent white backgrounds → solid white cards ── */
 html.light-theme .bg-white\/\[0\.015\],
 html.light-theme .bg-white\/\[0\.02\],
 html.light-theme .bg-white\/\[0\.025\],
 html.light-theme .bg-white\/\[0\.03\],
-html.light-theme .bg-white\/\[0\.04\] { background: rgba(0,0,0,.04) !important; }
+html.light-theme .bg-white\/\[0\.04\] { background: #ffffff !important; }
 
 html.light-theme .bg-white\/\[0\.06\],
 html.light-theme .bg-white\/\[0\.07\],
-html.light-theme .bg-white\/\[0\.08\] { background: rgba(0,0,0,.07) !important; }
+html.light-theme .bg-white\/\[0\.08\] { background: rgba(10,22,40,.05) !important; }
 
-html.light-theme .border-white\/5  { border-color: rgba(0,0,0,.07) !important; }
+/* Shorthand bg-white/N classes (5 = 5%, 10 = 10%) */
+html.light-theme .bg-white\/5  { background: rgba(10,22,40,.04) !important; }
+html.light-theme .bg-white\/10 { background: rgba(10,22,40,.06) !important; }
 
-html.light-theme .placeholder-white\/15::placeholder { color: rgba(10,22,40,.15) !important; }
-html.light-theme .placeholder-white\/20::placeholder { color: rgba(10,22,40,.2) !important; }
-html.light-theme .placeholder-white\/25::placeholder { color: rgba(10,22,40,.25) !important; }
-html.light-theme .placeholder-white\/30::placeholder { color: rgba(10,22,40,.3) !important; }
+/* Hover states — slightly darker than white so hover is perceivable */
+html.light-theme .hover\:bg-white\/\[0\.04\]:hover { background: rgba(10,22,40,.03) !important; }
+html.light-theme .hover\:bg-white\/\[0\.06\]:hover { background: rgba(10,22,40,.04) !important; }
+html.light-theme .hover\:bg-white\/\[0\.07\]:hover { background: rgba(10,22,40,.04) !important; }
+html.light-theme .hover\:bg-white\/\[0\.08\]:hover { background: rgba(10,22,40,.05) !important; }
+html.light-theme .hover\:bg-white\/5:hover  { background: rgba(10,22,40,.04) !important; }
+html.light-theme .hover\:bg-white\/10:hover { background: rgba(10,22,40,.07) !important; }
 
-/* Suppress hero glow animation — reads oddly on light background */
+/* ── Text: pure white → dark slate ── */
+html.light-theme .text-white { color: var(--fg) !important; }
+html.light-theme .hover\:text-white:hover { color: var(--fg) !important; }
+
+/* White-opacity text → readable dark equivalents (boosted ~20pts for equal perceived contrast) */
+html.light-theme .text-white\/30  { color: rgba(10,22,40,.50)  !important; }
+html.light-theme .text-white\/35  { color: rgba(10,22,40,.55)  !important; }
+html.light-theme .text-white\/40  { color: rgba(10,22,40,.62)  !important; }
+html.light-theme .text-white\/45  { color: rgba(10,22,40,.67)  !important; }
+html.light-theme .text-white\/50  { color: rgba(10,22,40,.72)  !important; }
+html.light-theme .text-white\/55  { color: rgba(10,22,40,.77)  !important; }
+html.light-theme .text-white\/60  { color: rgba(10,22,40,.83)  !important; }
+html.light-theme .text-white\/65  { color: rgba(10,22,40,.88)  !important; }
+html.light-theme .text-white\/70  { color: rgba(10,22,40,.92)  !important; }
+html.light-theme .text-white\/75  { color: rgba(10,22,40,.95)  !important; }
+html.light-theme .text-white\/80  { color: rgba(10,22,40,.97)  !important; }
+html.light-theme .text-white\/85  { color: rgba(10,22,40,1.00) !important; }
+html.light-theme .text-white\/90  { color: rgba(10,22,40,1.00) !important; }
+
+/* ── Teal text: darken to teal-700 so it reads on white (WCAG AA) ── */
+html.light-theme .text-teal-300 { color: #0F766E !important; }
+html.light-theme .text-teal-400 { color: #0F766E !important; }
+
+/* "Demo" badges with inline white-on-transparent styling */
+html.light-theme .demo-badge {
+  background: rgba(10,22,40,.08) !important;
+  color: rgba(10,22,40,.60) !important;
+  box-shadow: inset 0 0 0 1px rgba(10,22,40,.12) !important;
+}
+
+/* ── Borders ── */
+html.light-theme .border-white\/5  { border-color: rgba(10,22,40,.08) !important; }
+
+/* ── Placeholders ── */
+html.light-theme .placeholder-white\/15::placeholder { color: rgba(10,22,40,.25) !important; }
+html.light-theme .placeholder-white\/20::placeholder { color: rgba(10,22,40,.30) !important; }
+html.light-theme .placeholder-white\/25::placeholder { color: rgba(10,22,40,.35) !important; }
+html.light-theme .placeholder-white\/30::placeholder { color: rgba(10,22,40,.40) !important; }
+
+/* ── Misc ── */
 html.light-theme .hero-glow { animation: none; text-shadow: none; }
 
-/* Shimmer loading bar in light mode */
 html.light-theme .shimmer {
-  background: linear-gradient(90deg, rgba(0,0,0,.03) 0%, rgba(45,212,191,.15) 50%, rgba(0,0,0,.03) 100%);
+  background: linear-gradient(90deg, rgba(10,22,40,.02) 0%, rgba(45,212,191,.14) 50%, rgba(10,22,40,.02) 100%);
   background-size: 800px 100%;
 }
 
-/* Teal text → teal-700 in light mode — passes WCAG AA on white */
-html.light-theme .text-teal-300 { color: #0F766E !important; }
-html.light-theme .text-teal-400 { color: #0F766E !important; }
-html.light-theme .text-teal-300\/\[.*\] { color: #0F766E !important; }
-
-/* Logo SVG uses currentColor — force it to --fg in light mode */
+/* Logo SVG uses currentColor strokes — inherit dark --fg in light mode */
 html.light-theme svg { color: var(--fg); }
 
 html.light-theme header {
-  background: rgba(238,244,251,.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(0,0,0,.06);
+  background: rgba(238,244,251,.90);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(10,22,40,.08);
 }
 
 /* ── Shared utilities ──────────────────────────────────────────── */
