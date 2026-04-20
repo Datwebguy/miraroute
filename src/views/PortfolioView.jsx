@@ -29,8 +29,18 @@ function ActivityRow({ tx }) {
         </div>
         <div className="text-[10.5px] mono text-white/40 flex items-center gap-1.5">
           {agoText(tx.ts)}
-          <span className="text-white/25">·</span>
-          <span className="truncate">{tx.hash}</span>
+          {tx.hash && (
+            <>
+              <span className="text-white/25">·</span>
+              <a href={`https://testnet.arcscan.app/tx/${tx.hash}`}
+                 target="_blank" rel="noreferrer"
+                 className="flex items-center gap-0.5 text-teal-400/70 hover:text-teal-300 transition truncate"
+                 onClick={e => e.stopPropagation()}>
+                {tx.hash.slice(0, 8)}…{tx.hash.slice(-4)}
+                <Icons.External size={9} className="shrink-0"/>
+              </a>
+            </>
+          )}
         </div>
       </div>
       <div className="text-right shrink-0">

@@ -59,16 +59,23 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
     setStep(1);
     try {
       setStep(2);
-      await arcKit.bridge({
+      const bridgeResult = await arcKit.bridge({
         fromChain: Blockchain.Ethereum_Sepolia,
         toChain:   Blockchain.Arc_Testnet,
         amount:    amt,
         token:     'USDC',
       });
+      const bridgeHash = bridgeResult?.hash
+        ?? bridgeResult?.transactionHash
+        ?? bridgeResult?.txHash
+        ?? bridgeResult?.receipt?.transactionHash
+        ?? bridgeResult?.receipt?.hash
+        ?? null;
+      console.log('[MiraRoute] bridge result:', bridgeResult, '→ hash:', bridgeHash);
       setStep(3);
       setTimeout(() => {
         setStep(4);
-        onBridge?.({ sym: 'USDC', amount: amtNum, fromChain: 'ETH', toChain: 'ARC' });
+        onBridge?.({ sym: 'USDC', amount: amtNum, fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash });
         onToast?.(`Bridged ${amt} USDC → Arc Testnet via Circle CCTP`);
         setTimeout(() => { setStep(0); setAmt(''); }, 4000);
       }, 600);

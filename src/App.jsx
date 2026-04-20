@@ -40,7 +40,15 @@ export default function App() {
   useEffect(() => { localStorage.setItem('mr.tab', tab); }, [tab]);
 
   const [balances] = useState({ ...INITIAL_BALANCES });
-  const [transactions, setTransactions] = useState([]);
+  const [transactions, setTransactions] = useState(() => {
+    try {
+      const stored = localStorage.getItem('mr.transactions');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('mr.transactions', JSON.stringify(transactions.slice(0, 100))); } catch {}
+  }, [transactions]);
 
   const mergedBalances = {
     ...balances,
@@ -96,7 +104,15 @@ export default function App() {
         amountIn:    amount,
         slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
       });
-      const hash = result?.hash ?? result?.transactionHash ?? null;
+      const hash = result?.hash
+        ?? result?.transactionHash
+        ?? result?.txHash
+        ?? result?.receipt?.transactionHash
+        ?? result?.receipt?.hash
+        ?? result?.data?.hash
+        ?? result?.data?.transactionHash
+        ?? null;
+      console.log('[MiraRoute] swap result:', result, '→ hash:', hash);
       setSuccessTxHash(hash);
       await arcBalances.refetch();
       logTx({ type: 'swap', fromSym, toSym, amountIn: amountNum, amountOut, fastMode, live: true, hash });
@@ -120,9 +136,9 @@ export default function App() {
     showToast(`Deposit submitted for ${fmt(amt)} ${sym} into ${pool.name}`);
   };
 
-  const handleBridge = ({ sym, amount: amt, fromChain, toChain }) => {
+  const handleBridge = ({ sym, amount: amt, fromChain, toChain, hash }) => {
     arcBalances.refetch();
-    logTx({ type: 'bridge', sym, amount: amt, fromChain, toChain });
+    logTx({ type: 'bridge', sym, amount: amt, fromChain, toChain, hash });
   };
 
   const closeSuccess = () => {
