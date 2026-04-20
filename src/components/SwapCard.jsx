@@ -173,12 +173,22 @@ export function AdvancedSettings({ open, onToggle, slippage, onSlippage, gas, on
 }
 
 function SwapButton({ state, label, onClick, disabled }) {
+  if (state === 'approving') {
+    return (
+      <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
+        <span className="relative z-10 flex items-center justify-center gap-2">
+          <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
+          Approving EURC in wallet…
+        </span>
+      </button>
+    );
+  }
   if (state === 'submitting' || state === 'confirming') {
     return (
       <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
         <span className="relative z-10 flex items-center justify-center gap-2">
           <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
-          {state === 'confirming' ? 'Confirm in wallet…' : 'Submitting to Arc…'}
+          {state === 'confirming' ? 'Confirm swap in wallet…' : 'Submitting to Arc…'}
         </span>
       </button>
     );
@@ -196,6 +206,7 @@ export default function SwapCard({
   balances, swapState, onSwap, onOpenPicker,
   fastMode, slippage, setSlippage, autoSlip, setAutoSlip,
   gas, setGas, recipient, setRecipient, isConnected, onConnect,
+  needsApproval,
 }) {
   const [advOpen, setAdvOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(true);
@@ -217,6 +228,7 @@ export default function SwapCard({
     : !isLivePair && amountNum > 0 ? 'Demo only. Live swaps need USDC or EURC.'
     : amountNum === 0         ? 'Enter an amount'
     : insufficient            ? `Insufficient ${fromSym}`
+    : needsApproval           ? `Approve ${fromSym} to swap`
     : fastMode                ? 'Swap via Fast Mode'
     : `Swap ${fromSym} → ${toSym} on Arc`;
 

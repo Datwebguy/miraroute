@@ -1,20 +1,15 @@
 import { useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { erc20Abi, maxUint256, parseUnits } from "viem";
 import { Icons, TokenLogo } from "../components/Icons";
 import { fmt, fmtUSD } from "../utils/tokens";
 import { Blockchain } from "@circle-fin/app-kit";
+import { BRIDGE_CONTRACT } from "../utils/constants";
 
 // Circle's official USDC contract on Ethereum Sepolia testnet
 const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
 const SEPOLIA_CHAIN_ID = 11155111;
-const ERC20_BALANCE_ABI = [
-  { name: "balanceOf", type: "function", stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }] },
-  { name: "decimals", type: "function", stateMutability: "view",
-    inputs: [], outputs: [{ name: "", type: "uint8" }] },
-];
 
 const STEP_LABELS = ['Lock', 'Relay', 'Mint', 'Arrived'];
 
@@ -34,14 +29,57 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
   const [bridgeErr, setBridgeErr] = useState(null);
 
   // Fetch Sepolia USDC balance — explicit chainId ensures this works regardless of connected chain
-  const { data: rawBalance } = useReadContract({
+  const { data: rawBalance, refetch: refetchBridgeBal } = useReadContract({
     address: SEPOLIA_USDC,
-    abi: ERC20_BALANCE_ABI,
+    abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     chainId: SEPOLIA_CHAIN_ID,
     query: { enabled: !!address, refetchInterval: 8000 },
   });
+
+  // Check Sepolia USDC allowance for the Circle bridge contract
+  const amtRaw = (() => { try { return amt ? parseUnits(amt, 6) : 0n; } catch { return 0n; } })();
+  const { data: bridgeAllowance, refetch: refetchAllowance } = useReadContract({
+    address: SEPOLIA_USDC,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: address ? [address, BRIDGE_CONTRACT] : undefined,
+    chainId: SEPOLIA_CHAIN_ID,
+    query: { enabled: !!address, staleTime: 4000 },
+  });
+  const needsBridgeApproval = !!address && bridgeAllowance != null && amtRaw > 0n && bridgeAllowance < amtRaw;
+
+  // Approval write (Sepolia USDC → bridge contract)
+  const { writeContractAsync: approveAsync, isPending: isApprovePending } = useWriteContract();
+  const [approveTxHash, setApproveTxHash] = useState(undefined);
+  const { isSuccess: isApproveConfirmed, isLoading: isWaitApprove } = useWaitForTransactionReceipt({
+    hash: approveTxHash,
+    chainId: SEPOLIA_CHAIN_ID,
+    query: { enabled: !!approveTxHash },
+  });
+  const isApproving = isApprovePending || isWaitApprove;
+
+  const handleApprove = async () => {
+    setBridgeErr(null);
+    try {
+      const hash = await approveAsync({
+        address: SEPOLIA_USDC,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [BRIDGE_CONTRACT, maxUint256],
+        chainId: SEPOLIA_CHAIN_ID,
+      });
+      setApproveTxHash(hash);
+    } catch (err) {
+      const msg = String(err?.message ?? '');
+      setBridgeErr(
+        msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
+          ? 'Approval rejected by wallet'
+          : 'Approval failed. Please try again.'
+      );
+    }
+  };
 
   // USDC has 6 decimals
   const sepoliaBalance = rawBalance != null ? Number(rawBalance) / 1e6 : null;
@@ -51,7 +89,8 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
   const fee        = 1.20;
 
   const insufficient = sepoliaBalance != null && amtNum > 0 && amtNum > sepoliaBalance;
-  const canBridge    = isConnected && amtNum > 0 && !insufficient && step === 0;
+  const canBridge    = isConnected && amtNum > 0 && !insufficient && step === 0
+    && (!needsBridgeApproval || isApproveConfirmed);
 
   const startBridge = async () => {
     if (!canBridge) return;
@@ -77,6 +116,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
         setStep(4);
         onBridge?.({ sym: 'USDC', amount: amtNum, fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash });
         onToast?.(`Bridged ${amt} USDC → Arc Testnet via Circle CCTP`);
+        refetchBridgeBal(); refetchAllowance();
         setTimeout(() => { setStep(0); setAmt(''); }, 4000);
       }, 600);
     } catch (err) {
@@ -273,11 +313,29 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
           </div>
         )}
 
-        {/* Bridge button */}
+        {/* Bridge / Approve button */}
         {!isConnected ? (
           <button onClick={openConnectModal}
                   className="w-full py-4 rounded-2xl font-semibold text-[14.5px] grad-btn">
             Connect Wallet
+          </button>
+        ) : isApproving ? (
+          <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14.5px] relative overflow-hidden shimmer text-[#07261F]">
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              <span className="inline-block w-4 h-4 border-2 border-[#07261F]/60 border-t-transparent rounded-full spin-slow"/>
+              Approving USDC in wallet…
+            </span>
+          </button>
+        ) : needsBridgeApproval && !isApproveConfirmed ? (
+          <button onClick={handleApprove}
+                  disabled={!amtNum || insufficient}
+                  className={`w-full py-4 rounded-2xl font-semibold text-[14.5px] tracking-tight transition-all ${
+                    !amtNum || insufficient ? 'bg-white/[0.04] text-white/25 cursor-not-allowed' : 'grad-btn'
+                  }`}>
+            <span className="flex items-center justify-center gap-2">
+              <Icons.Check size={15} stroke="currentColor"/>
+              Approve USDC for Bridge
+            </span>
           </button>
         ) : (
           <button onClick={startBridge}

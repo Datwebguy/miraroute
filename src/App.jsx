@@ -20,6 +20,7 @@ import DocsView from "./views/DocsView";
 import { INITIAL_BALANCES, getToken, fmt } from "./utils/tokens";
 import { useArcKit } from "./hooks/useArcKit";
 import { useArcBalances } from "./hooks/useArcBalances";
+import { useEurcApproval } from "./hooks/useEurcApproval";
 
 export default function App() {
   const { address, isConnected } = useAccount();
@@ -62,6 +63,12 @@ export default function App() {
   const [recipient, setRecipient]   = useState('');
   const [pickerOpen, setPickerOpen] = useState(null);
 
+  // Approval only needed when selling EURC (ERC-20). USDC is native gas — no approval.
+  const eurcApproval = useEurcApproval(
+    fromSym === 'EURC' ? address : null,
+    fromSym === 'EURC' ? amount  : ''
+  );
+
   const [slippage, setSlippage] = useState(0.5);
   const [autoSlip, setAutoSlip] = useState(true);
   const [gas, setGas]           = useState('fast');
@@ -89,9 +96,32 @@ export default function App() {
   const isLivePair = fromT.live && toT.live;
   const fastMode   = isLivePair && amountNum > 0;
 
+  // After EURC approval is mined, automatically open the confirm modal.
+  useEffect(() => {
+    if (eurcApproval.isApproveConfirmed && swapState === 'approving') {
+      setSwapState('idle');
+      eurcApproval.refetchAllowance();
+      setConfirmOpen(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eurcApproval.isApproveConfirmed, swapState]);
+
   const handleSwap = () => {
     if (!isConnected || amountNum === 0) return;
-    setConfirmOpen(true);
+    if (fromSym === 'EURC' && eurcApproval.needsApproval) {
+      setSwapState('approving');
+      eurcApproval.approve().catch(err => {
+        setSwapState('idle');
+        const msg = String(err?.message ?? '');
+        showToast(
+          msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
+            ? 'Approval rejected by wallet'
+            : 'Approval failed. Please try again.'
+        );
+      });
+    } else {
+      setConfirmOpen(true);
+    }
   };
 
   const executeSwap = async () => {
@@ -197,6 +227,7 @@ export default function App() {
               recipient={recipient} setRecipient={setRecipient}
               isConnected={isConnected}
               onConnect={openConnectModal}
+              needsApproval={fromSym === 'EURC' && eurcApproval.needsApproval}
             />
 
             <div className="flex flex-wrap gap-2 pt-3">
