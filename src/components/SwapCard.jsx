@@ -194,7 +194,7 @@ function SwapButton({ state, label, onClick, disabled }) {
 export default function SwapCard({
   fromSym, toSym, amount, setAmount, setFromSym, setToSym,
   balances, swapState, onSwap, onOpenPicker,
-  fastMode, savings, slippage, setSlippage, autoSlip, setAutoSlip,
+  fastMode, slippage, setSlippage, autoSlip, setAutoSlip,
   gas, setGas, recipient, setRecipient, isConnected, onConnect,
 }) {
   const [advOpen, setAdvOpen] = useState(false);
@@ -279,7 +279,7 @@ export default function SwapCard({
             open={routeOpen} onToggle={() => setRouteOpen(o => !o)}
             fromSym={fromSym} toSym={toSym}
             amountIn={amountNum} amountOut={amountOut}
-            fastMode={fastMode} savings={savings}
+            fastMode={fastMode}
             slippage={autoSlip ? 0.5 : slippage} gas={gas}/>
         )}
 

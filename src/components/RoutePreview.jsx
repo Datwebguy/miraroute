@@ -14,12 +14,13 @@ function FastModeBadge({ visible }) {
 
 export { FastModeBadge };
 
-export default function RoutePreview({ open, onToggle, fromSym, toSym, amountIn, amountOut, fastMode, savings, slippage, gas }) {
+export default function RoutePreview({ open, onToggle, fromSym, toSym, amountIn, amountOut, fastMode, slippage, gas }) {
   const mid = !fastMode && fromSym !== 'USDC' && toSym !== 'USDC' ? 'USDC' : null;
   const hops = [fromSym, mid, toSym].filter(Boolean);
-  const fee   = (amountIn * getToken(fromSym).price * 0.0005).toFixed(4);
-  const price = amountIn > 0 ? amountOut / amountIn : 0;
-  const gasFee = gas === 'instant' ? 0.028 : gas === 'fast' ? 0.011 : 0.004;
+  const swapFee = amountIn * getToken(fromSym).price * 0.0005;
+  const price   = amountIn > 0 ? amountOut / amountIn : 0;
+  // Arc Testnet gas is paid in USDC and is very cheap (~$0.001–0.003)
+  const gasFee  = gas === 'instant' ? 0.003 : gas === 'fast' ? 0.0018 : 0.0008;
 
   return (
     <div className="rounded-2xl card-stroke bg-white/[0.015] overflow-hidden">
@@ -42,7 +43,6 @@ export default function RoutePreview({ open, onToggle, fromSym, toSym, amountIn,
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {savings > 0 && <span className="text-[11.5px] mono text-teal-400">You save {fmtUSD(savings)}</span>}
           {open ? <Icons.ChevronUp size={14} className="text-white/50"/> : <Icons.ChevronDown size={14} className="text-white/50"/>}
         </div>
       </button>
@@ -83,17 +83,11 @@ export default function RoutePreview({ open, onToggle, fromSym, toSym, amountIn,
             </div>
             <div className="flex items-center justify-between">
               <span className="text-white/50">Network fee</span>
-              <span className="mono text-white/85">{fmtUSD(parseFloat(fee) + gasFee)}</span>
+              <span className="mono text-white/85">{fmtUSD(swapFee + gasFee)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-white/50">Min received</span>
               <span className="mono text-white/85">{fmt(amountOut * (1 - slippage / 100), 4)} {toSym}</span>
-            </div>
-            <div className="flex items-center justify-between col-span-2 pt-2 border-t border-white/5">
-              <span className="text-white/50 flex items-center gap-1.5">
-                <Icons.TrendUp size={12} stroke="#2DD4BF"/> Savings vs Ethereum mainnet
-              </span>
-              <span className="mono text-teal-300 font-medium">You saved {fmtUSD(savings)}</span>
             </div>
           </div>
 

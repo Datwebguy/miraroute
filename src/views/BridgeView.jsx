@@ -1,12 +1,22 @@
 import { useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Icons, TokenLogo } from "../components/Icons";
 import { fmt, fmtUSD } from "../utils/tokens";
 import { Blockchain } from "@circle-fin/app-kit";
 
+// Circle's official USDC contract on Ethereum Sepolia testnet
+const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+const SEPOLIA_CHAIN_ID = 11155111;
+const ERC20_BALANCE_ABI = [
+  { name: "balanceOf", type: "function", stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }] },
+  { name: "decimals", type: "function", stateMutability: "view",
+    inputs: [], outputs: [{ name: "", type: "uint8" }] },
+];
+
 const STEP_LABELS = ['Lock', 'Relay', 'Mint', 'Arrived'];
-const STEP_DESCS  = ['Lock USDC on Sepolia', 'CCTP attestation', 'Mint on Arc', 'Settled ✓'];
 
 const COMING_SOON = [
   { name: 'BNB Smart Chain', short: 'BSC',  color: '#FCD34D' },
@@ -17,21 +27,36 @@ const COMING_SOON = [
 ];
 
 export default function BridgeView({ onToast, onBridge, arcKit }) {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const [amt, setAmt]          = useState('');
-  const [step, setStep]        = useState(0);
+  const [amt, setAmt]             = useState('');
+  const [step, setStep]           = useState(0);
   const [bridgeErr, setBridgeErr] = useState(null);
+
+  // Fetch Sepolia USDC balance — explicit chainId ensures this works regardless of connected chain
+  const { data: rawBalance } = useReadContract({
+    address: SEPOLIA_USDC,
+    abi: ERC20_BALANCE_ABI,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    chainId: SEPOLIA_CHAIN_ID,
+    query: { enabled: !!address, refetchInterval: 8000 },
+  });
+
+  // USDC has 6 decimals
+  const sepoliaBalance = rawBalance != null ? Number(rawBalance) / 1e6 : null;
 
   const amtNum     = parseFloat(amt) || 0;
   const receiveAmt = amtNum * 0.998;
   const fee        = 1.20;
 
+  const insufficient = sepoliaBalance != null && amtNum > 0 && amtNum > sepoliaBalance;
+  const canBridge    = isConnected && amtNum > 0 && !insufficient && step === 0;
+
   const startBridge = async () => {
-    if (!amtNum || step > 0) return;
+    if (!canBridge) return;
     setBridgeErr(null);
     setStep(1);
-
     try {
       setStep(2);
       await arcKit.bridge({
@@ -45,7 +70,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
         setStep(4);
         onBridge?.({ sym: 'USDC', amount: amtNum, fromChain: 'ETH', toChain: 'ARC' });
         onToast?.(`Bridged ${amt} USDC → Arc Testnet via Circle CCTP`);
-        setTimeout(() => setStep(0), 4000);
+        setTimeout(() => { setStep(0); setAmt(''); }, 4000);
       }, 600);
     } catch (err) {
       const msg = String(err?.message ?? '');
@@ -80,7 +105,6 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
 
         {/* Route display */}
         <div className="grid grid-cols-[1fr_40px_1fr] gap-2 items-center">
-          {/* From */}
           <div className="rounded-2xl p-4"
                style={{ background: 'rgba(255,255,255,0.025)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.06)' }}>
             <div className="text-[10px] mono uppercase tracking-[0.18em] text-white/40 mb-2">From</div>
@@ -96,7 +120,6 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
             </div>
           </div>
 
-          {/* Arrow */}
           <div className="flex items-center justify-center">
             <div className="w-9 h-9 rounded-full flex items-center justify-center"
                  style={{ background: 'linear-gradient(135deg, rgba(45,212,191,.2), rgba(255,255,255,.06))', boxShadow: 'inset 0 0 0 1px rgba(45,212,191,.35)' }}>
@@ -104,7 +127,6 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
             </div>
           </div>
 
-          {/* To */}
           <div className="rounded-2xl p-4"
                style={{ background: 'rgba(255,255,255,0.025)', boxShadow: 'inset 0 0 0 1px rgba(45,212,191,.2)' }}>
             <div className="text-[10px] mono uppercase tracking-[0.18em] text-teal-400/70 mb-2">To</div>
@@ -134,7 +156,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
 
         {/* Amount input */}
         <div className="rounded-2xl p-4 space-y-2"
-             style={{ background: 'rgba(255,255,255,.025)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.05)' }}>
+             style={{ background: 'rgba(255,255,255,.025)', boxShadow: `inset 0 0 0 1px ${insufficient ? 'rgba(248,113,113,.35)' : 'rgba(255,255,255,.05)'}` }}>
           <div className="flex items-center justify-between text-[11px] mono uppercase tracking-[0.15em] text-white/40">
             <span>Amount</span>
             <span>Sending from Ethereum Sepolia</span>
@@ -146,13 +168,23 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
               className="flex-1 min-w-0 bg-transparent text-[36px] font-light outline-none placeholder-white/15 tracking-tight"
               placeholder="0"
             />
+            {/* Token locked to USDC — CCTP only supports USDC */}
             <div className="flex items-center gap-2 pl-2 pr-3 py-2 rounded-full shrink-0"
                  style={{ background: 'rgba(255,255,255,.07)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.1)' }}>
               <TokenLogo sym="USDC" size={24}/>
               <span className="text-[13.5px] font-semibold">USDC</span>
             </div>
           </div>
-          <div className="text-[11.5px] mono text-white/40">{amtNum > 0 ? fmtUSD(amtNum) : '$0.00'}</div>
+          <div className="flex items-center justify-between">
+            <div className={`text-[11.5px] mono ${insufficient ? 'text-rose-400' : 'text-white/40'}`}>
+              {amtNum > 0 ? fmtUSD(amtNum) : '$0.00'}
+            </div>
+            <div className="text-[11.5px] mono text-white/40">
+              {sepoliaBalance != null
+                ? <span className={insufficient ? 'text-rose-400' : ''}>Balance: {fmt(sepoliaBalance, 2)} USDC</span>
+                : isConnected ? <span className="opacity-50">Loading…</span> : null}
+            </div>
+          </div>
         </div>
 
         {/* Receive estimate */}
@@ -171,9 +203,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
               </span>
             </div>
           </div>
-
           <div className="h-px bg-white/[0.04]"/>
-
           <div className="grid grid-cols-2 gap-y-2.5 text-[12.5px]">
             <div>
               <div className="text-white/40 text-[11px] mono mb-0.5">Bridge fee</div>
@@ -244,16 +274,17 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
           </button>
         ) : (
           <button onClick={startBridge}
-                  disabled={!amtNum || step > 0}
+                  disabled={!canBridge}
                   className={`w-full py-4 rounded-2xl font-semibold text-[14.5px] tracking-tight transition-all ${
-                    !amtNum || step > 0 ? 'bg-white/[0.04] text-white/25 cursor-not-allowed' : 'grad-btn'
+                    !canBridge ? 'bg-white/[0.04] text-white/25 cursor-not-allowed' : 'grad-btn'
                   }`}>
             {step > 0 ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-[#07261F]/60 border-t-transparent rounded-full spin-slow"/>
                 Bridging…
               </span>
-            ) : !amtNum ? 'Enter an amount' : (
+            ) : insufficient ? 'Insufficient USDC Balance'
+              : !amtNum ? 'Enter an amount' : (
               <span className="flex items-center justify-center gap-2">
                 <Icons.ArrowDown size={15} stroke="currentColor" className="-rotate-90"/>
                 Bridge USDC to Arc (CCTP)
@@ -261,6 +292,12 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
             )}
           </button>
         )}
+
+        {/* CCTP note */}
+        <div className="flex items-center gap-1.5 text-[11px] mono text-white/35 px-1">
+          <Icons.Info size={11} className="shrink-0"/>
+          CCTP only supports stablecoin bridging. Swap native assets to USDC first.
+        </div>
 
         <div className="flex items-center justify-between text-[10.5px] mono text-white/30 px-1">
           <span className="flex items-center gap-1.5"><Icons.Shield size={10}/> Canonical · MEV-protected</span>

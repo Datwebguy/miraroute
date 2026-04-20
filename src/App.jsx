@@ -80,7 +80,6 @@ export default function App() {
   const amountOut = amountNum * (fromT.price / toT.price) * 0.999;
   const isLivePair = fromT.live && toT.live;
   const fastMode   = isLivePair && amountNum > 0;
-  const savings    = amountNum > 0 ? 15.40 : 0;
 
   const handleSwap = () => {
     if (!isConnected || amountNum === 0) return;
@@ -176,7 +175,6 @@ export default function App() {
               onSwap={handleSwap}
               onOpenPicker={setPickerOpen}
               fastMode={fastMode}
-              savings={savings}
               slippage={slippage} setSlippage={setSlippage}
               autoSlip={autoSlip} setAutoSlip={setAutoSlip}
               gas={gas} setGas={setGas}
