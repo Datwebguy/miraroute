@@ -54,7 +54,7 @@ export default function LandingPage({ onLaunch, onDocs, theme, onThemeToggle }) 
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-x-hidden">
-      <ParallaxOcean/>
+      <ParallaxOcean theme={theme}/>
 
       {/* Nav */}
       <header className="w-full px-6 sm:px-10 py-5 flex items-center justify-between relative z-20">

@@ -101,12 +101,12 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
 
       {/* Main card */}
       <div className="rounded-[26px] p-5 space-y-3"
-           style={{ background: 'rgba(15,30,46,0.88)', backdropFilter: 'blur(16px)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.07), 0 0 60px -20px rgba(45,212,191,.18)' }}>
+           style={{ background: 'var(--bg-card)', backdropFilter: 'blur(16px)', boxShadow: 'inset 0 0 0 1px var(--border), 0 0 60px -20px rgba(45,212,191,.18)' }}>
 
         {/* Route display */}
         <div className="grid grid-cols-[1fr_40px_1fr] gap-2 items-center">
           <div className="rounded-2xl p-4"
-               style={{ background: 'rgba(255,255,255,0.025)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.06)' }}>
+               style={{ background: 'var(--bg-input)', boxShadow: 'inset 0 0 0 1px var(--border)' }}>
             <div className="text-[10px] mono uppercase tracking-[0.18em] text-white/40 mb-2">From</div>
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
@@ -156,7 +156,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
 
         {/* Amount input */}
         <div className="rounded-2xl p-4 space-y-2"
-             style={{ background: 'rgba(255,255,255,.025)', boxShadow: `inset 0 0 0 1px ${insufficient ? 'rgba(248,113,113,.35)' : 'rgba(255,255,255,.05)'}` }}>
+             style={{ background: 'var(--bg-input)', boxShadow: `inset 0 0 0 1px ${insufficient ? 'rgba(248,113,113,.35)' : 'var(--border-in)'}` }}>
           <div className="flex items-center justify-between text-[11px] mono uppercase tracking-[0.15em] text-white/40">
             <span>Amount</span>
             <span>Sending from Ethereum Sepolia</span>
@@ -189,7 +189,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
 
         {/* Receive estimate */}
         <div className="rounded-2xl p-4 space-y-3"
-             style={{ background: 'rgba(0,0,0,.25)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.04)' }}>
+             style={{ background: 'var(--bg-input)', boxShadow: 'inset 0 0 0 1px var(--border-in)' }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-white/55 text-[12.5px]">
               <Icons.Dot size={9} className="text-teal-400"/>

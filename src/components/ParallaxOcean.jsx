@@ -1,6 +1,3 @@
-// ParallaxOcean.jsx — animated canvas background with mouse parallax
-// Three layers: back streaks, grid lines, teal floating dots
-
 import { useEffect, useRef, useState } from "react";
 
 function useMouseParallax() {
@@ -49,7 +46,8 @@ function CanvasLayer({ drawFn, speed = 1, parallax = { x: 0, y: 0 }, intensity =
   }, [drawFn, speed]);
 
   return (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex, transform: `translate3d(${-parallax.x * intensity}px, ${-parallax.y * intensity}px, 0)`, transition: 'transform 0.1s linear', willChange: 'transform' }}>
+    <div className="parallax-layer fixed inset-0 pointer-events-none"
+         style={{ zIndex, transform: `translate3d(${-parallax.x * intensity}px, ${-parallax.y * intensity}px, 0)`, transition: 'transform 0.1s linear', willChange: 'transform' }}>
       <canvas ref={canvasRef}/>
     </div>
   );
@@ -134,15 +132,24 @@ const drawDots = (ctx, t, w, h) => {
   }
 };
 
-export default function ParallaxOcean() {
-  const mouse = useMouseParallax();
+export default function ParallaxOcean({ theme }) {
+  const isLight = theme === 'light';
+  const mouse   = useMouseParallax();
+
+  const bgStyle = isLight
+    ? { background: 'radial-gradient(1200px 600px at 70% -5%, rgba(45,212,191,.07), transparent 60%), radial-gradient(800px 400px at 20% 100%, rgba(45,212,191,.04), transparent 60%), #F8FAFC' }
+    : { background: 'radial-gradient(1200px 600px at 80% -10%, rgba(45,212,191,.12), transparent 60%), radial-gradient(900px 500px at 10% 110%, rgba(94,234,212,.06), transparent 60%), #0D1B2A' };
+
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
-      <div className="absolute inset-0" style={{ background: `radial-gradient(1200px 600px at 80% -10%, rgba(45,212,191,.12), transparent 60%), radial-gradient(900px 500px at 10% 110%, rgba(94,234,212,.06), transparent 60%), #0D1B2A` }}/>
+      <div className="absolute inset-0" style={{ ...bgStyle, transition: 'background 0.4s ease' }}/>
       <CanvasLayer drawFn={drawBack} speed={1.6} parallax={mouse} intensity={8}  zIndex={1}/>
       <CanvasLayer drawFn={drawGrid} speed={1.0} parallax={mouse} intensity={18} zIndex={2}/>
       <CanvasLayer drawFn={drawDots} speed={0.7} parallax={mouse} intensity={34} zIndex={3}/>
-      <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at center, transparent 40%, rgba(7,15,26,.55) 100%)' }}/>
+      {/* Dark vignette only in dark mode */}
+      {!isLight && (
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at center, transparent 40%, rgba(7,15,26,.55) 100%)', zIndex: 4 }}/>
+      )}
     </div>
   );
 }
