@@ -38,7 +38,7 @@ export function useArcKit() {
         tokenIn,
         tokenOut,
         amountIn: amountIn.toString(),
-        config:   { slippageBps, kitKey: KIT_KEY },
+        config:   { slippageBps, kitKey: KIT_KEY, allowanceStrategy: 'permit' },
       });
     } catch (err) {
       // Circle SDK throws an enhanced error WITH txHash if the tx was submitted

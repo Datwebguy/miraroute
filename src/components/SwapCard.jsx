@@ -1,24 +1,12 @@
-import { useState, useEffect, useRef } from "react";
-import {
-  useAccount,
-  useReadContract,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
-import { erc20Abi, parseUnits } from "viem";
+import { useState, useRef, useEffect } from "react";
+import { useAccount } from "wagmi";
 import { Icons, TokenLogo } from "./Icons";
 import { getToken, fmt, fmtUSD } from "../utils/tokens";
 import { FastModeBadge } from "./RoutePreview";
 import RoutePreview from "./RoutePreview";
-import { arcTestnet, CONTRACTS, ARC_ADAPTER } from "../utils/constants";
 import { useArcKit } from "../hooks/useArcKit";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
-
-function safeParseUnits(str) {
-  try { return str && parseFloat(str) > 0 ? parseUnits(str, 6) : 0n; }
-  catch { return 0n; }
-}
 
 function saveMiraHistory(entry) {
   try {
@@ -210,11 +198,10 @@ export default function SwapCard({
   const { address } = useAccount();
   const arcKit = useArcKit();
 
-  const [advOpen,    setAdvOpen]    = useState(false);
-  const [routeOpen,  setRouteOpen]  = useState(true);
-  const [swapError,  setSwapError]  = useState(null);
-  const [isExecuting, setIsExecuting] = useState(false);  // arcKit.swap() in flight
-  const [approveTxHash, setApproveTxHash] = useState(undefined);
+  const [advOpen,     setAdvOpen]    = useState(false);
+  const [routeOpen,   setRouteOpen]  = useState(true);
+  const [swapError,   setSwapError]  = useState(null);
+  const [isExecuting, setIsExecuting] = useState(false);
 
   // ── display values ────────────────────────────────────────────────────────────
   const fromT      = getToken(fromSym);
@@ -228,39 +215,9 @@ export default function SwapCard({
   const usdOut     = amountNum > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
   const insufficient = amountNum > balance && amountNum > 0;
 
-  const amountRaw   = safeParseUnits(amount);
-  const tokenInAddr = CONTRACTS[fromSym];
+  // Circle SDK handles allowance internally via EIP-2612 Permit (off-chain sign, no gas tx)
 
-  // ── Hook 1: useReadContract — current allowance ───────────────────────────────
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address:      tokenInAddr,
-    abi:          erc20Abi,
-    functionName: 'allowance',
-    args:         address ? [address, ARC_ADAPTER] : undefined,
-    chainId:      arcTestnet.id,
-    query:        { enabled: !!address && !!tokenInAddr && amountRaw > 0n, staleTime: 3000 },
-  });
-
-  const needsApproval =
-    !!address && allowance !== undefined && amountRaw > 0n && allowance < amountRaw;
-
-  // ── Hook 2: useWriteContract — Approve ───────────────────────────────────────
-  const { writeContractAsync: approveAsync, isPending: isApprovePending } = useWriteContract();
-
-  // ── Hook 3: useWaitForTransactionReceipt — wait for Approval ─────────────────
-  const { isLoading: isWaitingApprove, isSuccess: isApproveConfirmed } =
-    useWaitForTransactionReceipt({
-      hash:    approveTxHash,
-      chainId: arcTestnet.id,
-      query:   { enabled: !!approveTxHash },
-    });
-
-  useEffect(() => {
-    if (isApproveConfirmed && approveTxHash) refetchAllowance();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isApproveConfirmed, approveTxHash]);
-
-  // ── Hook 4 trigger: arcKit.swap() — executes the swap on Arc ─────────────────
+  // ── arcKit.swap() — executes the swap on Arc ─────────────────────────────────
   // arcKit.swap() internally calls the Circle API with proper auth + encoding,
   // then submits via walletClient.writeContract() → eth_sendTransaction.
   const runSwap = async () => {
@@ -312,37 +269,12 @@ export default function SwapCard({
   };
 
   // ── Derived busy state ────────────────────────────────────────────────────────
-  const isApproving = isApprovePending || isWaitingApprove;
-  const isBusy      = isApproving || isExecuting;
+  const isBusy = isExecuting;
 
   // ── Main action handler ───────────────────────────────────────────────────────
   const handleAction = async () => {
     if (!isConnected) { onConnect?.(); return; }
-    setSwapError(null);
-
-    if (needsApproval) {
-      // Hook 2: Approve tokenIn spending
-      try {
-        const hash = await approveAsync({
-          address:      tokenInAddr,
-          abi:          erc20Abi,
-          functionName: 'approve',
-          args:         [ARC_ADAPTER, amountRaw],
-          chainId:      arcTestnet.id,
-        });
-        setApproveTxHash(hash);
-      } catch (err) {
-        const msg = String(err?.message ?? '');
-        setSwapError(
-          msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
-            ? 'Approval rejected by wallet'
-            : 'Approval failed. Please try again.'
-        );
-      }
-    } else {
-      // Hook 4: Execute swap
-      await runSwap();
-    }
+    await runSwap();
   };
 
   const flip = () => { setFromSym(toSym); setToSym(fromSym); setAmount(''); };
@@ -357,9 +289,7 @@ export default function SwapCard({
     : !isLivePair && amountNum > 0 ? 'Demo only — Live swaps need USDC or EURC'
     : amountNum === 0              ? 'Enter an amount'
     : insufficient                 ? `Insufficient ${fromSym}`
-    : isApproving                  ? 'Approving...'
     : isExecuting                  ? 'Confirm in Wallet...'
-    : needsApproval                ? `Approve ${fromSym}`
     : fastMode                     ? 'Swap via Fast Mode'
     :                                `Swap ${fromSym} → ${toSym} on Arc`;
 
@@ -381,7 +311,7 @@ export default function SwapCard({
             <FastModeBadge visible={fastMode}/>
             <LiveBadge live={isLivePair}/>
           </div>
-          <button title="Refresh" onClick={() => refetchAllowance()}
+          <button title="Refresh" onClick={() => setSwapError(null)}
                   className="p-1.5 rounded-lg hover:bg-white/5 text-white/50 hover:text-white transition">
             <Icons.Refresh size={14}/>
           </button>
