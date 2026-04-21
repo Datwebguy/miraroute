@@ -16,18 +16,9 @@ import BridgeView from "./views/BridgeView";
 import PortfolioView from "./views/PortfolioView";
 import DocsView from "./views/DocsView";
 
-import { INITIAL_BALANCES, getToken, fmt, fmtUSD } from "./utils/tokens";
+import { INITIAL_BALANCES, getToken, fmt } from "./utils/tokens";
 import { useArcKit } from "./hooks/useArcKit";
 import { useArcBalances } from "./hooks/useArcBalances";
-import { useSwapLifecycle } from "./hooks/useSwapLifecycle";
-
-function pushMiraHistory(entry) {
-  try {
-    const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
-    history.unshift(entry);
-    localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
-  } catch {}
-}
 
 export default function App() {
   const { address, isConnected } = useAccount();
@@ -61,74 +52,52 @@ export default function App() {
   const [recipient,  setRecipient]  = useState('');
   const [pickerOpen, setPickerOpen] = useState(null);
 
-  const [slippage,  setSlippage]  = useState(0.5);
-  const [autoSlip,  setAutoSlip]  = useState(true);
-  const [gas,       setGas]       = useState('fast');
+  const [slippage, setSlippage] = useState(0.5);
+  const [autoSlip, setAutoSlip] = useState(true);
+  const [gas,      setGas]      = useState('fast');
 
-  const [successOpen,    setSuccessOpen]    = useState(false);
-  const [successTxHash,  setSuccessTxHash]  = useState(null);
-  const [toast,          setToast]          = useState(null);
+  const [successOpen,   setSuccessOpen]   = useState(false);
+  const [successTxHash, setSuccessTxHash] = useState(null);
+  const [toast,         setToast]         = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
-
-  // ── Swap lifecycle (4-step wagmi state machine) ──────────────────────────────
-  const lifecycle = useSwapLifecycle({
-    address:    isConnected ? address : null,
-    fromSym,
-    toSym,
-    amount,
-    slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
-  });
 
   const fromT     = getToken(fromSym);
   const toT       = getToken(toSym);
   const amountNum = parseFloat(amount) || 0;
   const amountOut = amountNum * (fromT.price / toT.price) * 0.999;
-  const isLivePair = fromT.live && toT.live;
-  const fastMode   = isLivePair && amountNum > 0;
 
-  // On swap success: save history, show overlay, refetch balances
-  useEffect(() => {
-    if (lifecycle.swapStatus === 'success' && lifecycle.txHash) {
-      pushMiraHistory({
-        type:      'Swap',
-        amount:    amountNum,
-        amountIn:  amountNum,
-        amountOut,
-        fromSym,
-        toSym,
-        hash:      lifecycle.txHash,
-        date:      Date.now(),
-      });
-      arcBalances.refetch();
-      setSuccessTxHash(lifecycle.txHash);
-      setSuccessOpen(true);
-      showToast(`Swapped ${amount} ${fromSym} → ${fmt(amountOut, 4)} ${toSym} on Arc`);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lifecycle.swapStatus, lifecycle.txHash]);
-
-  const handleSwap = () => {
-    if (!isConnected) { openConnectModal?.(); return; }
-    if (lifecycle.swapStatus === 'needs_approval') lifecycle.approve();
-    else lifecycle.executeSwap();
+  // Called by SwapCard after swap receipt is confirmed
+  // txHash = receipt.transactionHash → explorer link: https://testnet.arcscan.app/tx/${txHash}
+  const handleSwapSuccess = (txHash) => {
+    arcBalances.refetch();
+    setSuccessTxHash(txHash);
+    setSuccessOpen(true);
+    showToast(`Swapped ${amount} ${fromSym} → ${fmt(amountOut, 4)} ${toSym} on Arc`);
   };
 
   const closeSuccess = () => {
     setSuccessOpen(false);
     setSuccessTxHash(null);
     setAmount('');
-    lifecycle.reset();
   };
 
   const handleEarnDeposit = (pool, amt, sym) => {
-    pushMiraHistory({ type: 'Deposit', amount: amt, sym, poolName: pool.name, apy: pool.apy, date: Date.now() });
+    try {
+      const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
+      history.unshift({ type: 'Deposit', amount: amt, sym, poolName: pool.name, apy: pool.apy, date: Date.now() });
+      localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
+    } catch {}
     showToast(`Deposit submitted for ${fmt(amt)} ${sym} into ${pool.name}`);
   };
 
   const handleBridge = ({ sym, amount: amt, fromChain, toChain, hash }) => {
     arcBalances.refetch();
-    pushMiraHistory({ type: 'Bridge', amount: amt, sym, fromChain, toChain, hash, date: Date.now() });
+    try {
+      const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
+      history.unshift({ type: 'Bridge', amount: amt, sym, fromChain, toChain, hash, date: Date.now() });
+      localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
+    } catch {}
   };
 
   const launchDapp = () => { setView('dapp'); setTab('Swap'); };
@@ -170,11 +139,9 @@ export default function App() {
               setFromSym={setFromSym} setToSym={setToSym}
               amount={amount} setAmount={setAmount}
               balances={mergedBalances}
-              swapStatus={lifecycle.swapStatus}
-              swapError={lifecycle.error}
-              onSwap={handleSwap}
+              onSuccess={handleSwapSuccess}
               onOpenPicker={setPickerOpen}
-              fastMode={fastMode}
+              fastMode={fromT.live && toT.live && amountNum > 0}
               slippage={slippage} setSlippage={setSlippage}
               autoSlip={autoSlip} setAutoSlip={setAutoSlip}
               gas={gas} setGas={setGas}

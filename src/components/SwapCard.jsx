@@ -1,8 +1,25 @@
 import { useState, useEffect, useRef } from "react";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { erc20Abi, maxUint256, parseUnits } from "viem";
 import { Icons, TokenLogo } from "./Icons";
 import { getToken, fmt, fmtUSD } from "../utils/tokens";
 import { FastModeBadge } from "./RoutePreview";
 import RoutePreview from "./RoutePreview";
+import { arcTestnet, CONTRACTS, ARC_ADAPTER } from "../utils/constants";
+import { adapterContractAbi } from "../utils/swapAbi";
+import { fetchSwapTx } from "../utils/fetchSwapTx";
+
+function safeParseUnits(str) {
+  try { return str && parseFloat(str) > 0 ? parseUnits(str, 6) : 0n; }
+  catch { return 0n; }
+}
+
+// ─── Sub-components (UI only, no state) ─────────────────────────────────────
 
 function LiveBadge({ live }) {
   if (live) return (
@@ -172,71 +189,195 @@ export function AdvancedSettings({ open, onToggle, slippage, onSlippage, gas, on
   );
 }
 
-function SwapButton({ swapStatus, label, onClick, disabled }) {
-  if (swapStatus === 'approving') {
-    return (
-      <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
-        <span className="relative z-10 flex items-center justify-center gap-2">
-          <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
-          Approving in wallet…
-        </span>
-      </button>
-    );
-  }
-  if (swapStatus === 'executing') {
-    return (
-      <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
-        <span className="relative z-10 flex items-center justify-center gap-2">
-          <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
-          Confirm in Wallet…
-        </span>
-      </button>
-    );
-  }
-  return (
-    <button disabled={disabled} onClick={onClick}
-            className={`w-full py-4 rounded-2xl font-semibold text-[14px] tracking-tight transition ${disabled ? 'bg-white/[0.04] text-white/30 cursor-not-allowed' : 'grad-btn'}`}>
-      {label}
-    </button>
-  );
-}
+// ─── Main SwapCard ────────────────────────────────────────────────────────────
 
 export default function SwapCard({
   fromSym, toSym, amount, setAmount, setFromSym, setToSym,
-  balances, swapStatus, swapError, onSwap, onOpenPicker,
+  balances, onOpenPicker,
   fastMode, slippage, setSlippage, autoSlip, setAutoSlip,
   gas, setGas, recipient, setRecipient, isConnected, onConnect,
+  onSuccess,   // (txHash: string) => void — called after swap receipt confirmed
 }) {
-  const [advOpen, setAdvOpen] = useState(false);
-  const [routeOpen, setRouteOpen] = useState(true);
+  const { address } = useAccount();
 
-  const fromT = getToken(fromSym);
-  const toT   = getToken(toSym);
+  // UI-only state
+  const [advOpen,   setAdvOpen]   = useState(false);
+  const [routeOpen, setRouteOpen] = useState(true);
+  const [swapError, setSwapError] = useState(null);
+  const [isFetching, setIsFetching] = useState(false);
+
+  // Tx hash slots for the two write hooks
+  const [approveTxHash, setApproveTxHash] = useState(undefined);
+  const [executeTxHash, setExecuteTxHash] = useState(undefined);
+
+  // Derived display values
+  const fromT     = getToken(fromSym);
+  const toT       = getToken(toSym);
   const isLivePair = fromT.live && toT.live;
-  const amountNum = parseFloat(amount) || 0;
-  const amountOut = amountNum * (fromT.price / toT.price) * 0.999;
-  const balance   = balances[fromSym] ?? 0;
-  const toBal     = balances[toSym]   ?? 0;
-  const usdIn     = amountNum > 0 ? fmtUSD(amountNum * fromT.price) : '$0.00';
-  const usdOut    = amountNum > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
+  const amountNum  = parseFloat(amount) || 0;
+  const amountOut  = amountNum * (fromT.price / toT.price) * 0.999;
+  const balance    = balances[fromSym] ?? 0;
+  const toBal      = balances[toSym]   ?? 0;
+  const usdIn      = amountNum > 0 ? fmtUSD(amountNum * fromT.price) : '$0.00';
+  const usdOut     = amountNum > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
   const insufficient = amountNum > balance && amountNum > 0;
 
-  const isBusy   = swapStatus === 'approving' || swapStatus === 'executing';
-  const canSwap  = isConnected && amountNum > 0 && !insufficient && !isBusy && isLivePair;
-  const btnLabel =
-    !isConnected                        ? 'Connect wallet'
-    : !isLivePair && amountNum > 0      ? 'Demo only. Live swaps need USDC or EURC.'
-    : amountNum === 0                   ? 'Enter an amount'
-    : insufficient                      ? `Insufficient ${fromSym}`
-    : swapStatus === 'needs_approval'   ? `Approve ${fromSym}`
-    : fastMode                          ? 'Swap via Fast Mode'
-    : `Swap ${fromSym} → ${toSym} on Arc`;
+  const amountRaw   = safeParseUnits(amount);
+  const tokenInAddr = CONTRACTS[fromSym];
 
-  const handleBtn = () => {
+  // ── Hook 1: useReadContract — check allowance ────────────────────────────────
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address:      tokenInAddr,
+    abi:          erc20Abi,
+    functionName: 'allowance',
+    args:         address ? [address, ARC_ADAPTER] : undefined,
+    chainId:      arcTestnet.id,
+    query:        { enabled: !!address && !!tokenInAddr && amountRaw > 0n, staleTime: 3000 },
+  });
+
+  const needsApproval =
+    !!address && allowance !== undefined && amountRaw > 0n && allowance < amountRaw;
+
+  // ── Hook 2: useWriteContract — Approve ──────────────────────────────────────
+  const { writeContractAsync: approveAsync, isPending: isApprovePending } = useWriteContract();
+
+  // ── Hook 3: useWaitForTransactionReceipt — wait for Approval ────────────────
+  const { isSuccess: isApproveConfirmed, isLoading: isWaitingApprove } =
+    useWaitForTransactionReceipt({
+      hash:    approveTxHash,
+      chainId: arcTestnet.id,
+      query:   { enabled: !!approveTxHash },
+    });
+
+  useEffect(() => {
+    if (isApproveConfirmed && approveTxHash) refetchAllowance();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApproveConfirmed, approveTxHash]);
+
+  // ── Hook 4: useWriteContract — Execute swap ──────────────────────────────────
+  const { writeContractAsync: executeAsync, isPending: isExecutePending } = useWriteContract();
+
+  const { isSuccess: isSwapConfirmed, data: swapReceipt } =
+    useWaitForTransactionReceipt({
+      hash:    executeTxHash,
+      chainId: arcTestnet.id,
+      query:   { enabled: !!executeTxHash },
+    });
+
+  // ── On swap confirmed ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isSwapConfirmed || !swapReceipt) return;
+
+    const txHash = swapReceipt.transactionHash;
+
+    // Save to miraHistory (exact format from spec)
+    const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
+    history.unshift({
+      type:      'Swap',
+      amount:    amountNum,
+      amountIn:  amountNum,
+      amountOut,
+      fromSym,
+      toSym,
+      hash:      txHash,  // receipt.transactionHash
+      date:      Date.now(),
+    });
+    localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
+
+    // Notify App.jsx — explorer link uses https://testnet.arcscan.app/tx/${txHash}
+    onSuccess?.(txHash);
+
+    // Reset for next swap
+    setExecuteTxHash(undefined);
+    setApproveTxHash(undefined);
+    setSwapError(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSwapConfirmed, swapReceipt]);
+
+  // ── Derived busy/status ───────────────────────────────────────────────────────
+  const isApproving = isApprovePending || isWaitingApprove;
+  const isExecuting = isFetching || isExecutePending;
+  const isBusy      = isApproving || isExecuting;
+
+  // ── Action handler ────────────────────────────────────────────────────────────
+  const handleAction = async () => {
     if (!isConnected) { onConnect?.(); return; }
-    if (canSwap || swapStatus === 'needs_approval') onSwap();
+    setSwapError(null);
+
+    if (needsApproval) {
+      // ── Step 2: Approve tokenIn ────────────────────────────────────────────
+      try {
+        const hash = await approveAsync({
+          address:      tokenInAddr,
+          abi:          erc20Abi,
+          functionName: 'approve',
+          args:         [ARC_ADAPTER, maxUint256],
+          chainId:      arcTestnet.id,
+        });
+        setApproveTxHash(hash);
+      } catch (err) {
+        const msg = String(err?.message ?? '');
+        setSwapError(
+          msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
+            ? 'Approval rejected by wallet'
+            : 'Approval failed. Please try again.'
+        );
+      }
+    } else {
+      // ── Step 4: Execute swap via Circle adapter ────────────────────────────
+      setIsFetching(true);
+      try {
+        const { executeParams, tokenInputs, signature, nativeValue } = await fetchSwapTx({
+          tokenIn:     fromSym,
+          tokenOut:    toSym,
+          amount,
+          fromAddress: address,
+          slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
+        });
+        setIsFetching(false);
+        const hash = await executeAsync({
+          address:      ARC_ADAPTER,
+          abi:          adapterContractAbi,
+          functionName: 'execute',
+          args:         [executeParams, tokenInputs, signature],
+          value:        nativeValue,
+          chainId:      arcTestnet.id,
+        });
+        setExecuteTxHash(hash);
+      } catch (err) {
+        setIsFetching(false);
+        const msg = String(err?.message ?? err ?? '');
+        console.error('[MiraRoute swap error]', err);
+        setSwapError(
+          msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
+            ? 'Transaction rejected by wallet'
+            : msg ? `Swap error: ${msg.slice(0, 100)}` : 'Swap failed. Try again.'
+        );
+      }
+    }
   };
+
   const flip = () => { setFromSym(toSym); setToSym(fromSym); setAmount(''); };
+
+  // ── Button label ──────────────────────────────────────────────────────────────
+  //   allowance < amount  → "Approve USDC"     (Hook 2)
+  //   Hook 3 isLoading    → "Approving..."     (disabled)
+  //   allowance >= amount → "Swap"             (Hook 4)
+  //   Hook 4 pending      → "Confirm in Wallet..."
+  const btnLabel =
+    !isConnected                     ? 'Connect wallet'
+    : !isLivePair && amountNum > 0   ? 'Demo only. Live swaps need USDC or EURC.'
+    : amountNum === 0                ? 'Enter an amount'
+    : insufficient                   ? `Insufficient ${fromSym}`
+    : isApproving                    ? 'Approving...'
+    : isExecuting                    ? 'Confirm in Wallet...'
+    : needsApproval                  ? `Approve ${fromSym}`
+    : fastMode                       ? 'Swap via Fast Mode'
+    :                                  `Swap ${fromSym} → ${toSym} on Arc`;
+
+  const btnDisabled = isConnected && (
+    isBusy || amountNum === 0 || insufficient || (!isLivePair && amountNum > 0)
+  );
 
   return (
     <div className="w-full max-w-[500px] relative">
@@ -278,14 +419,14 @@ export default function SwapCard({
         {/* Recipient */}
         <RecipientField value={recipient} onChange={setRecipient}/>
 
-        {/* Advanced settings — always inside the card */}
+        {/* Advanced settings */}
         <AdvancedSettings
           open={advOpen} onToggle={() => setAdvOpen(o => !o)}
           slippage={slippage} onSlippage={setSlippage}
           autoSlip={autoSlip} onAutoSlip={setAutoSlip}
           gas={gas} onGas={setGas}/>
 
-        {/* Route preview — always inside the card */}
+        {/* Route preview */}
         {amountNum > 0 && (
           <RoutePreview
             open={routeOpen} onToggle={() => setRouteOpen(o => !o)}
@@ -295,12 +436,28 @@ export default function SwapCard({
             slippage={autoSlip ? 0.5 : slippage} gas={gas}/>
         )}
 
-        {/* Swap button */}
+        {/* Primary button */}
         <div className="pt-1">
-          <SwapButton swapStatus={swapStatus} label={btnLabel}
-                      disabled={isConnected && !canSwap && swapStatus !== 'needs_approval'} onClick={handleBtn}/>
+          {isBusy ? (
+            <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
+                {btnLabel}
+              </span>
+            </button>
+          ) : (
+            <button
+              disabled={btnDisabled}
+              onClick={handleAction}
+              className={`w-full py-4 rounded-2xl font-semibold text-[14px] tracking-tight transition ${
+                btnDisabled ? 'bg-white/[0.04] text-white/30 cursor-not-allowed' : 'grad-btn'
+              }`}>
+              {btnLabel}
+            </button>
+          )}
         </div>
 
+        {/* Inline error */}
         {swapError && (
           <div className="flex items-start gap-2 text-[11.5px] mono text-rose-400 px-1 -mt-1">
             <span className="shrink-0 mt-0.5">⚠</span>
