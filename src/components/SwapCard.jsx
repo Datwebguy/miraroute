@@ -274,12 +274,13 @@ export default function SwapCard({
         slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
       });
 
-      // Circle SDK v1.3.0 returns { txHash } as primary field
+      // Circle SDK v1.3.0 returns { txHash } — use || so empty strings fall through
       const txHash =
-        result?.txHash           ??
-        result?.hash             ??
-        result?.transactionHash  ??
-        result?.receipt?.transactionHash ??
+        result?.txHash ||
+        result?.hash ||
+        result?.transactionHash ||
+        result?.receipt?.transactionHash ||
+        (result?.explorerUrl ? result.explorerUrl.split('/tx/').pop() : null) ||
         null;
 
       console.log('[MiraRoute] swap result:', result, '→ hash:', txHash);
