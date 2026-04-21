@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Icons, TokenLogo } from "../components/Icons";
 import { TOKENS, getToken, fmt, fmtUSD } from "../utils/tokens";
 
@@ -10,10 +11,19 @@ function agoText(ts) {
 }
 
 function ActivityRow({ tx }) {
-  const iconFor = tx.type === 'swap'    ? <Icons.Swap size={13} stroke="#5EEAD4"/>
-                : tx.type === 'deposit' ? <Icons.Plus size={13} stroke="#5EEAD4"/>
+  // Normalise type — accept both 'swap' and 'Swap' etc.
+  const type = (tx.type ?? '').toLowerCase();
+  const isSwap    = type === 'swap';
+  const isDeposit = type === 'deposit';
+  const isBridge  = type === 'bridge';
+  // Timestamp: miraHistory uses `date`, old tx log used `ts`
+  const ts = tx.ts ?? tx.date ?? Date.now();
+
+  const iconFor = isSwap    ? <Icons.Swap size={13} stroke="#5EEAD4"/>
+                : isDeposit ? <Icons.Plus size={13} stroke="#5EEAD4"/>
                 : <Icons.ArrowDown size={13} stroke="#5EEAD4" className="-rotate-90"/>;
-  const labelFor = tx.type === 'swap' ? 'Swap' : tx.type === 'deposit' ? 'Deposit' : 'Bridge';
+  const labelFor = isSwap ? 'Swap' : isDeposit ? 'Deposit' : 'Bridge';
+
   return (
     <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.04] card-stroke transition">
       <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
@@ -23,12 +33,12 @@ function ActivityRow({ tx }) {
       <div className="flex-1 min-w-0">
         <div className="text-[12.5px] font-medium flex items-center gap-1.5">
           {labelFor}
-          {tx.type === 'swap'    && <span className="text-white/65 mono">{tx.fromSym} → {tx.toSym}</span>}
-          {tx.type === 'deposit' && <span className="text-white/65 mono">{tx.poolName}</span>}
-          {tx.type === 'bridge'  && <span className="text-white/65 mono">{tx.fromChain} → {tx.toChain}</span>}
+          {isSwap    && <span className="text-white/65 mono">{tx.fromSym} → {tx.toSym}</span>}
+          {isDeposit && <span className="text-white/65 mono">{tx.poolName}</span>}
+          {isBridge  && <span className="text-white/65 mono">{tx.fromChain} → {tx.toChain}</span>}
         </div>
         <div className="text-[10.5px] mono text-white/40 flex items-center gap-1.5">
-          {agoText(tx.ts)}
+          {agoText(ts)}
           {tx.hash && (
             <>
               <span className="text-white/25">·</span>
@@ -44,19 +54,19 @@ function ActivityRow({ tx }) {
         </div>
       </div>
       <div className="text-right shrink-0">
-        {tx.type === 'swap' && (
+        {isSwap && (
           <>
-            <div className="text-[12px] mono text-rose-300/80">−{fmt(tx.amountIn)} {tx.fromSym}</div>
-            <div className="text-[12px] mono text-teal-300">+{fmt(tx.amountOut, 4)} {tx.toSym}</div>
+            <div className="text-[12px] mono text-rose-300/80">−{fmt(tx.amountIn ?? tx.amount)} {tx.fromSym}</div>
+            <div className="text-[12px] mono text-teal-300">+{fmt(tx.amountOut ?? 0, 4)} {tx.toSym}</div>
           </>
         )}
-        {tx.type === 'deposit' && (
+        {isDeposit && (
           <>
             <div className="text-[12px] mono text-white/85">{fmt(tx.amount)} {tx.sym}</div>
             <div className="text-[10.5px] mono text-teal-300">{tx.apy?.toFixed(1)}% APY</div>
           </>
         )}
-        {tx.type === 'bridge' && (
+        {isBridge && (
           <>
             <div className="text-[12px] mono text-white/85">{fmt(tx.amount)} {tx.sym}</div>
             <div className="text-[10.5px] mono text-teal-300">→ {tx.toChain}</div>
@@ -81,7 +91,12 @@ function Spark({ up }) {
   );
 }
 
-export default function PortfolioView({ address, balances, transactions, onGoSwap }) {
+export default function PortfolioView({ address, balances, onGoSwap }) {
+  // Read miraHistory fresh on every mount (i.e., every time Portfolio tab is opened)
+  const [transactions] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('miraHistory') || '[]'); }
+    catch { return []; }
+  });
   const shortAddr = address ? `${address.slice(0, 8)}…${address.slice(-4)}` : '—';
 
   const holdings = TOKENS
@@ -209,11 +224,11 @@ export default function PortfolioView({ address, balances, transactions, onGoSwa
         <div className="rounded-3xl bg-[#0F1E2E]/70 backdrop-blur card-stroke shadow-card p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="text-[14px] font-semibold">Recent activity</div>
-            {transactions?.length > 0 && (
+            {transactions.length > 0 && (
               <span className="text-[11px] mono text-white/45">{transactions.length} {transactions.length === 1 ? 'tx' : 'txs'}</span>
             )}
           </div>
-          {!transactions?.length ? (
+          {!transactions.length ? (
             <div className="flex flex-col items-center justify-center text-center py-10 px-2">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
                    style={{ background: 'radial-gradient(circle, rgba(45,212,191,.15), transparent 70%)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.06)' }}>
@@ -229,7 +244,7 @@ export default function PortfolioView({ address, balances, transactions, onGoSwa
             </div>
           ) : (
             <div className="space-y-2 max-h-[320px] overflow-y-auto no-scrollbar pr-1">
-              {transactions.map(tx => <ActivityRow key={tx.id} tx={tx}/>)}
+              {transactions.map((tx, i) => <ActivityRow key={tx.hash ?? i} tx={tx}/>)}
             </div>
           )}
 

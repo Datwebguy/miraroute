@@ -172,23 +172,23 @@ export function AdvancedSettings({ open, onToggle, slippage, onSlippage, gas, on
   );
 }
 
-function SwapButton({ state, label, onClick, disabled }) {
-  if (state === 'approving') {
+function SwapButton({ swapStatus, label, onClick, disabled }) {
+  if (swapStatus === 'approving') {
     return (
       <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
         <span className="relative z-10 flex items-center justify-center gap-2">
           <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
-          Approving EURC in wallet…
+          Approving in wallet…
         </span>
       </button>
     );
   }
-  if (state === 'submitting' || state === 'confirming') {
+  if (swapStatus === 'executing') {
     return (
       <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
         <span className="relative z-10 flex items-center justify-center gap-2">
           <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
-          {state === 'confirming' ? 'Confirm swap in wallet…' : 'Submitting to Arc…'}
+          Confirm in Wallet…
         </span>
       </button>
     );
@@ -203,10 +203,9 @@ function SwapButton({ state, label, onClick, disabled }) {
 
 export default function SwapCard({
   fromSym, toSym, amount, setAmount, setFromSym, setToSym,
-  balances, swapState, onSwap, onOpenPicker,
+  balances, swapStatus, swapError, onSwap, onOpenPicker,
   fastMode, slippage, setSlippage, autoSlip, setAutoSlip,
   gas, setGas, recipient, setRecipient, isConnected, onConnect,
-  needsApproval,
 }) {
   const [advOpen, setAdvOpen] = useState(false);
   const [routeOpen, setRouteOpen] = useState(true);
@@ -222,19 +221,20 @@ export default function SwapCard({
   const usdOut    = amountNum > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
   const insufficient = amountNum > balance && amountNum > 0;
 
-  const canSwap = isConnected && amountNum > 0 && !insufficient && swapState === 'idle' && isLivePair;
+  const isBusy   = swapStatus === 'approving' || swapStatus === 'executing';
+  const canSwap  = isConnected && amountNum > 0 && !insufficient && !isBusy && isLivePair;
   const btnLabel =
-    !isConnected              ? 'Connect wallet'
-    : !isLivePair && amountNum > 0 ? 'Demo only. Live swaps need USDC or EURC.'
-    : amountNum === 0         ? 'Enter an amount'
-    : insufficient            ? `Insufficient ${fromSym}`
-    : needsApproval           ? `Approve ${fromSym} to swap`
-    : fastMode                ? 'Swap via Fast Mode'
+    !isConnected                        ? 'Connect wallet'
+    : !isLivePair && amountNum > 0      ? 'Demo only. Live swaps need USDC or EURC.'
+    : amountNum === 0                   ? 'Enter an amount'
+    : insufficient                      ? `Insufficient ${fromSym}`
+    : swapStatus === 'needs_approval'   ? `Approve ${fromSym}`
+    : fastMode                          ? 'Swap via Fast Mode'
     : `Swap ${fromSym} → ${toSym} on Arc`;
 
   const handleBtn = () => {
     if (!isConnected) { onConnect?.(); return; }
-    if (canSwap) onSwap();
+    if (canSwap || swapStatus === 'needs_approval') onSwap();
   };
   const flip = () => { setFromSym(toSym); setToSym(fromSym); setAmount(''); };
 
@@ -297,9 +297,16 @@ export default function SwapCard({
 
         {/* Swap button */}
         <div className="pt-1">
-          <SwapButton state={swapState} label={btnLabel}
-                      disabled={isConnected && !canSwap} onClick={handleBtn}/>
+          <SwapButton swapStatus={swapStatus} label={btnLabel}
+                      disabled={isConnected && !canSwap && swapStatus !== 'needs_approval'} onClick={handleBtn}/>
         </div>
+
+        {swapError && (
+          <div className="flex items-start gap-2 text-[11.5px] mono text-rose-400 px-1 -mt-1">
+            <span className="shrink-0 mt-0.5">⚠</span>
+            {swapError}
+          </div>
+        )}
 
         <div className="flex items-center justify-between text-[11px] mono text-white/35 px-1">
           <span className="flex items-center gap-1.5"><Icons.Lock size={10}/> Your keys, your coins. MEV shield active.</span>

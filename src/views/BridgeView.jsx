@@ -114,6 +114,11 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
       setStep(3);
       setTimeout(() => {
         setStep(4);
+        try {
+          const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
+          history.unshift({ type: 'Bridge', amount: amtNum, sym: 'USDC', fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash, date: Date.now() });
+          localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
+        } catch {}
         onBridge?.({ sym: 'USDC', amount: amtNum, fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash });
         onToast?.(`Bridged ${amt} USDC → Arc Testnet via Circle CCTP`);
         refetchBridgeBal(); refetchAllowance();

@@ -7,7 +7,6 @@ import Navbar from "./components/Navbar";
 import SwapCard from "./components/SwapCard";
 import TokenSelector from "./components/TokenSelector";
 import SuccessOverlay from "./components/EarnCard";
-import ConfirmModal from "./components/ConfirmModal";
 import Footer from "./components/Footer";
 import { Icons } from "./components/Icons";
 
@@ -17,10 +16,18 @@ import BridgeView from "./views/BridgeView";
 import PortfolioView from "./views/PortfolioView";
 import DocsView from "./views/DocsView";
 
-import { INITIAL_BALANCES, getToken, fmt } from "./utils/tokens";
+import { INITIAL_BALANCES, getToken, fmt, fmtUSD } from "./utils/tokens";
 import { useArcKit } from "./hooks/useArcKit";
 import { useArcBalances } from "./hooks/useArcBalances";
-import { useEurcApproval } from "./hooks/useEurcApproval";
+import { useSwapLifecycle } from "./hooks/useSwapLifecycle";
+
+function pushMiraHistory(entry) {
+  try {
+    const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
+    history.unshift(entry);
+    localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
+  } catch {}
+}
 
 export default function App() {
   const { address, isConnected } = useAccount();
@@ -37,19 +44,10 @@ export default function App() {
   const onThemeToggle = () => setTheme(t => t === 'light' ? 'dark' : 'light');
 
   const [view, setView] = useState('landing');
-  const [tab, setTab] = useState(() => localStorage.getItem('mr.tab') || 'Swap');
+  const [tab,  setTab]  = useState(() => localStorage.getItem('mr.tab') || 'Swap');
   useEffect(() => { localStorage.setItem('mr.tab', tab); }, [tab]);
 
   const [balances] = useState({ ...INITIAL_BALANCES });
-  const [transactions, setTransactions] = useState(() => {
-    try {
-      const stored = localStorage.getItem('mr.transactions');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem('mr.transactions', JSON.stringify(transactions.slice(0, 100))); } catch {}
-  }, [transactions]);
 
   const mergedBalances = {
     ...balances,
@@ -57,37 +55,30 @@ export default function App() {
     ...(arcBalances.EURC != null && { EURC: arcBalances.EURC }),
   };
 
-  const [fromSym, setFromSym]       = useState('USDC');
-  const [toSym, setToSym]           = useState('EURC');
-  const [amount, setAmount]         = useState('');
-  const [recipient, setRecipient]   = useState('');
+  const [fromSym,    setFromSym]    = useState('USDC');
+  const [toSym,      setToSym]      = useState('EURC');
+  const [amount,     setAmount]     = useState('');
+  const [recipient,  setRecipient]  = useState('');
   const [pickerOpen, setPickerOpen] = useState(null);
 
-  // Approval only needed when selling EURC (ERC-20). USDC is native gas — no approval.
-  const eurcApproval = useEurcApproval(
-    fromSym === 'EURC' ? address : null,
-    fromSym === 'EURC' ? amount  : ''
-  );
+  const [slippage,  setSlippage]  = useState(0.5);
+  const [autoSlip,  setAutoSlip]  = useState(true);
+  const [gas,       setGas]       = useState('fast');
 
-  const [slippage, setSlippage] = useState(0.5);
-  const [autoSlip, setAutoSlip] = useState(true);
-  const [gas, setGas]           = useState('fast');
-
-  const [swapState, setSwapState]         = useState('idle');
-  const [successOpen, setSuccessOpen]     = useState(false);
-  const [successTxHash, setSuccessTxHash] = useState(null);
-  const [confirmOpen, setConfirmOpen]     = useState(false);
-  const [toast, setToast]                 = useState(null);
+  const [successOpen,    setSuccessOpen]    = useState(false);
+  const [successTxHash,  setSuccessTxHash]  = useState(null);
+  const [toast,          setToast]          = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3500); };
 
-  const logTx = (tx) => {
-    setTransactions(prev => [{
-      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-      ts: Date.now(),
-      ...tx,
-    }, ...prev]);
-  };
+  // ── Swap lifecycle (4-step wagmi state machine) ──────────────────────────────
+  const lifecycle = useSwapLifecycle({
+    address:    isConnected ? address : null,
+    fromSym,
+    toSym,
+    amount,
+    slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
+  });
 
   const fromT     = getToken(fromSym);
   const toT       = getToken(toSym);
@@ -96,86 +87,48 @@ export default function App() {
   const isLivePair = fromT.live && toT.live;
   const fastMode   = isLivePair && amountNum > 0;
 
-  // After EURC approval is mined, automatically open the confirm modal.
+  // On swap success: save history, show overlay, refetch balances
   useEffect(() => {
-    if (eurcApproval.isApproveConfirmed && swapState === 'approving') {
-      setSwapState('idle');
-      eurcApproval.refetchAllowance();
-      setConfirmOpen(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eurcApproval.isApproveConfirmed, swapState]);
-
-  const handleSwap = () => {
-    if (!isConnected || amountNum === 0) return;
-    if (fromSym === 'EURC' && eurcApproval.needsApproval) {
-      setSwapState('approving');
-      eurcApproval.approve().catch(err => {
-        setSwapState('idle');
-        const msg = String(err?.message ?? '');
-        showToast(
-          msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
-            ? 'Approval rejected by wallet'
-            : 'Approval failed. Please try again.'
-        );
+    if (lifecycle.swapStatus === 'success' && lifecycle.txHash) {
+      pushMiraHistory({
+        type:      'Swap',
+        amount:    amountNum,
+        amountIn:  amountNum,
+        amountOut,
+        fromSym,
+        toSym,
+        hash:      lifecycle.txHash,
+        date:      Date.now(),
       });
-    } else {
-      setConfirmOpen(true);
-    }
-  };
-
-  const executeSwap = async () => {
-    setConfirmOpen(false);
-    setSwapState('confirming');
-    try {
-      const result = await arcKit.swap({
-        tokenIn:     fromSym,
-        tokenOut:    toSym,
-        amountIn:    amount,
-        slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
-      });
-      const hash = result?.hash
-        ?? result?.transactionHash
-        ?? result?.txHash
-        ?? result?.receipt?.transactionHash
-        ?? result?.receipt?.hash
-        ?? result?.data?.hash
-        ?? result?.data?.transactionHash
-        ?? null;
-      console.log('[MiraRoute] swap result:', result, '→ hash:', hash);
-      setSuccessTxHash(hash);
-      await arcBalances.refetch();
-      logTx({ type: 'swap', fromSym, toSym, amountIn: amountNum, amountOut, fastMode, live: true, hash });
-      setSwapState('success');
+      arcBalances.refetch();
+      setSuccessTxHash(lifecycle.txHash);
       setSuccessOpen(true);
       showToast(`Swapped ${amount} ${fromSym} → ${fmt(amountOut, 4)} ${toSym} on Arc`);
-    } catch (err) {
-      setSwapState('idle');
-      const msg = String(err?.message ?? err ?? '');
-      console.error('[MiraRoute swap error]', err);
-      if (msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')) {
-        showToast('Transaction rejected by wallet');
-      } else {
-        showToast(msg ? `Swap error: ${msg.slice(0, 90)}` : 'Swap failed. Make sure your wallet is on Arc Testnet.');
-      }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lifecycle.swapStatus, lifecycle.txHash]);
+
+  const handleSwap = () => {
+    if (!isConnected) { openConnectModal?.(); return; }
+    if (lifecycle.swapStatus === 'needs_approval') lifecycle.approve();
+    else lifecycle.executeSwap();
+  };
+
+  const closeSuccess = () => {
+    setSuccessOpen(false);
+    setSuccessTxHash(null);
+    setAmount('');
+    lifecycle.reset();
   };
 
   const handleEarnDeposit = (pool, amt, sym) => {
-    logTx({ type: 'deposit', poolName: pool.name, sym, amount: amt, apy: pool.apy });
+    pushMiraHistory({ type: 'Deposit', amount: amt, sym, poolName: pool.name, apy: pool.apy, date: Date.now() });
     showToast(`Deposit submitted for ${fmt(amt)} ${sym} into ${pool.name}`);
   };
 
   const handleBridge = ({ sym, amount: amt, fromChain, toChain, hash }) => {
     arcBalances.refetch();
-    logTx({ type: 'bridge', sym, amount: amt, fromChain, toChain, hash });
-  };
-
-  const closeSuccess = () => {
-    setSuccessOpen(false);
-    setSwapState('idle');
-    setAmount('');
-    setSuccessTxHash(null);
+    pushMiraHistory({ type: 'Bridge', amount: amt, sym, fromChain, toChain, hash, date: Date.now() });
   };
 
   const launchDapp = () => { setView('dapp'); setTab('Swap'); };
@@ -217,7 +170,8 @@ export default function App() {
               setFromSym={setFromSym} setToSym={setToSym}
               amount={amount} setAmount={setAmount}
               balances={mergedBalances}
-              swapState={swapState}
+              swapStatus={lifecycle.swapStatus}
+              swapError={lifecycle.error}
               onSwap={handleSwap}
               onOpenPicker={setPickerOpen}
               fastMode={fastMode}
@@ -227,7 +181,6 @@ export default function App() {
               recipient={recipient} setRecipient={setRecipient}
               isConnected={isConnected}
               onConnect={openConnectModal}
-              needsApproval={fromSym === 'EURC' && eurcApproval.needsApproval}
             />
 
             <div className="flex flex-wrap gap-2 pt-3">
@@ -260,8 +213,7 @@ export default function App() {
 
       {tab === 'Portfolio' && (
         <main className="flex-1 w-full flex flex-col px-4 pt-10 pb-24">
-          <PortfolioView address={address} balances={mergedBalances}
-                         transactions={transactions} onGoSwap={() => setTab('Swap')}/>
+          <PortfolioView address={address} balances={mergedBalances} onGoSwap={() => setTab('Swap')}/>
         </main>
       )}
 
@@ -279,17 +231,6 @@ export default function App() {
       <TokenSelector open={pickerOpen === 'to'} exclude={fromSym} balances={mergedBalances}
                      onClose={() => setPickerOpen(null)}
                      onPick={s => { setToSym(s); setPickerOpen(null); }}/>
-
-      <ConfirmModal
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        onConfirm={executeSwap}
-        fromSym={fromSym} toSym={toSym}
-        amountIn={amountNum} amountOut={amountOut}
-        slippage={autoSlip ? 0.5 : slippage}
-        gas={gas}
-        isLive={isLivePair}
-      />
 
       <SuccessOverlay
         open={successOpen} onClose={closeSuccess}
