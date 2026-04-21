@@ -42,6 +42,11 @@ export const CONTRACTS = {
   EURC: TOKENS.EURC.address,
 };
 
+// ── Curve pool (direct USDC/EURC swap — no routing middleware) ─────────────────
+
+// Verified on Arc Testnet: coins[0]=EURC, coins[1]=USDC
+export const CURVE_USDC_EURC_POOL = '0x95aF759ec2f4385EdBbBA959A8a1CDc65610D080';
+
 // ── Circle contracts ───────────────────────────────────────────────────────────
 
 // Circle App Kit adapter — spender for ERC-20 approvals on Arc Testnet
