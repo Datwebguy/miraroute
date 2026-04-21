@@ -5,7 +5,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { erc20Abi, maxUint256, parseUnits } from "viem";
+import { erc20Abi, parseUnits } from "viem";
 import { Icons, TokenLogo } from "./Icons";
 import { getToken, fmt, fmtUSD } from "../utils/tokens";
 import { FastModeBadge } from "./RoutePreview";
@@ -327,7 +327,7 @@ export default function SwapCard({
           address:      tokenInAddr,
           abi:          erc20Abi,
           functionName: 'approve',
-          args:         [ARC_ADAPTER, maxUint256],
+          args:         [ARC_ADAPTER, amountRaw],
           chainId:      arcTestnet.id,
         });
         setApproveTxHash(hash);

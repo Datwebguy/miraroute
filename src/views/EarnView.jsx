@@ -35,7 +35,7 @@ function DepositModal({ pool, onClose, onConfirm, balances }) {
             <div className="text-[11px] mono uppercase tracking-[0.18em] text-teal-400 mb-1">Deposit into</div>
             <div className="flex items-center gap-2.5">
               <div className="flex -space-x-2">
-                {pool.pair.map((s, i) => <div key={s} style={{ zIndex: 10 - i }}><TokenLogo sym={s} size={28}/></div>)}
+                {pool.pair.map((s, i) => <div key={i} style={{ zIndex: 10 - i }}><TokenLogo sym={s} size={28}/></div>)}
               </div>
               <div className="text-[16px] font-semibold">{pool.name}</div>
             </div>
@@ -163,6 +163,8 @@ export default function EarnView({ onDeposit, balances }) {
       </div>
 
       <div className="rounded-3xl bg-[#0F1E2E]/70 backdrop-blur card-stroke shadow-card overflow-hidden">
+        <div className="overflow-x-auto">
+        <div className="min-w-[640px]">
         <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] px-5 py-3 text-[10.5px] mono uppercase tracking-[0.15em] text-white/35 border-b border-white/5">
           <div>Pool</div>
           <div>Type</div>
@@ -175,7 +177,7 @@ export default function EarnView({ onDeposit, balances }) {
           <div key={p.name} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] px-5 py-4 items-center hover:bg-white/[0.02] border-b border-white/[0.04] last:border-b-0">
             <div className="flex items-center gap-3">
               <div className="flex -space-x-2">
-                {p.pair.map((s, i) => <div key={s} style={{ zIndex: 10 - i }}><TokenLogo sym={s} size={30}/></div>)}
+                {p.pair.map((s, i) => <div key={i} style={{ zIndex: 10 - i }}><TokenLogo sym={s} size={30}/></div>)}
               </div>
               <div>
                 <div className="text-[14px] font-medium flex items-center gap-2">
@@ -208,6 +210,8 @@ export default function EarnView({ onDeposit, balances }) {
             </div>
           </div>
         ))}
+        </div>
+        </div>
       </div>
 
       <div className="mt-4 text-[11px] mono text-white/35 flex items-center gap-2 justify-center">

@@ -52,13 +52,19 @@ export function useArcKit() {
 
   const bridge = useCallback(async ({ fromChain, toChain, amount, token = "USDC" }) => {
     const adapter = await getAdapter();
-    return kit.bridge({
-      from:   { adapter, chain: fromChain },
-      to:     { adapter, chain: toChain },
-      amount: amount.toString(),
-      token,
-      config: { kitKey: KIT_KEY },
-    });
+    try {
+      return await kit.bridge({
+        from:   { adapter, chain: fromChain },
+        to:     { adapter, chain: toChain },
+        amount: amount.toString(),
+        token,
+        config: { kitKey: KIT_KEY },
+      });
+    } catch (err) {
+      const hash = err?.txHash || err?.sourceTxHash || err?.details?.txHash || null;
+      if (hash) return { txHash: hash, partialResult: true };
+      throw err;
+    }
   }, [getAdapter]);
 
   return { swap, bridge, isReady: isConnected };

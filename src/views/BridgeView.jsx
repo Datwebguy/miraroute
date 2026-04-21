@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { erc20Abi, maxUint256, parseUnits } from "viem";
+import { erc20Abi, parseUnits } from "viem";
 import { Icons, TokenLogo } from "../components/Icons";
 import { fmt, fmtUSD } from "../utils/tokens";
 import { Blockchain } from "@circle-fin/app-kit";
@@ -67,7 +67,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
         address: SEPOLIA_USDC,
         abi: erc20Abi,
         functionName: "approve",
-        args: [BRIDGE_CONTRACT, maxUint256],
+        args: [BRIDGE_CONTRACT, amtRaw],
         chainId: SEPOLIA_CHAIN_ID,
       });
       setApproveTxHash(hash);
@@ -104,12 +104,13 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
         amount:    amt,
         token:     'USDC',
       });
-      const bridgeHash = bridgeResult?.hash
-        ?? bridgeResult?.transactionHash
-        ?? bridgeResult?.txHash
-        ?? bridgeResult?.receipt?.transactionHash
-        ?? bridgeResult?.receipt?.hash
-        ?? null;
+      const bridgeHash =
+        bridgeResult?.txHash ||
+        bridgeResult?.hash ||
+        bridgeResult?.transactionHash ||
+        bridgeResult?.receipt?.transactionHash ||
+        bridgeResult?.receipt?.hash ||
+        null;
       console.log('[MiraRoute] bridge result:', bridgeResult, '→ hash:', bridgeHash);
       setStep(3);
       setTimeout(() => {
