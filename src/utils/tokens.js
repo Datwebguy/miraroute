@@ -1,19 +1,13 @@
-// Arc Testnet — live tokens: USDC (native gas) + EURC. All others are demo only.
+// Arc Testnet — live tokens only: USDC (native gas) + EURC.
+// All other tokens (WETH, WBTC, wSOL, USDT, MIRA) have been removed
+// as they do not exist on Arc Testnet.
 
 export const TOKENS = [
-  { sym: 'USDC', name: 'USD Coin',      price: 1.00,     color: '#2775CA', tag: 'Live',     live: true  },
-  { sym: 'EURC', name: 'Euro Coin',     price: 1.08,     color: '#2DD4BF', tag: 'Live',     live: true  },
-  { sym: 'WETH', name: 'Wrapped Ether', price: 3142.70,  color: '#93C5FD', tag: 'Demo',     live: false },
-  { sym: 'WBTC', name: 'Wrapped BTC',   price: 63210.0,  color: '#F7931A', tag: 'Demo',     live: false },
-  { sym: 'wSOL', name: 'Wrapped SOL',   price: 148.20,   color: '#9945FF', tag: 'Demo',     live: false },
-  { sym: 'USDT', name: 'Tether USD',    price: 1.00,     color: '#26A17B', tag: 'Demo',     live: false },
-  { sym: 'MIRA', name: 'MiraRoute',     price: 0.42,     color: '#E6EDF5', tag: 'Protocol', live: false },
+  { sym: 'USDC', name: 'USD Coin',  price: 1.00, color: '#2775CA', tag: 'Live', live: true },
+  { sym: 'EURC', name: 'Euro Coin', price: 1.08, color: '#2DD4BF', tag: 'Live', live: true },
 ];
 
-// All balances start at 0 — live balances come from Arc on-chain via useArcBalances
-export const INITIAL_BALANCES = {
-  USDC: 0, EURC: 0, WETH: 0, WBTC: 0, wSOL: 0, USDT: 0, MIRA: 0,
-};
+export const INITIAL_BALANCES = { USDC: 0, EURC: 0 };
 
 export const getToken = (sym) => TOKENS.find(t => t.sym === sym) ?? TOKENS[0];
 

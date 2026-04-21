@@ -61,6 +61,14 @@ export default function Navbar({ tab, onTab, onHome, theme, onThemeToggle }) {
           <span className="text-teal-400 font-medium">Live</span>
         </div>
 
+        {/* Faucet link */}
+        <a href="https://faucet.circle.com" target="_blank" rel="noreferrer"
+           title="Get testnet USDC"
+           className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/[0.03] card-stroke hover:bg-white/[0.07] transition text-[11.5px] mono text-teal-400">
+          <Icons.Zap size={11} fill="#2DD4BF" stroke="#2DD4BF"/>
+          Faucet
+        </a>
+
         {/* Dark / Light toggle */}
         <button
           onClick={onThemeToggle}

@@ -2,18 +2,34 @@ import { useState } from "react";
 import { Icons, TokenLogo } from "../components/Icons";
 import { getToken, fmt, fmtUSD } from "../utils/tokens";
 
+// Only real, verified pools on Arc Testnet are listed here.
+// CurveStableSwap: 0x95aF759ec2f4385EdBbBA959A8a1CDc65610D080
+// coins[0]=EURC, coins[1]=USDC
 const POOLS = [
-  { pair: ['USDC','EURC'],  name: 'USDC / EURC',    apy: 24.8, tvl: 14_200_000, type: 'LP',      risk: 'Low',    boost: true },
-  { pair: ['USDC','EURC'],  name: 'USDC / EURC Stable', apy: 6.4, tvl: 38_500_000, type: 'Stable', risk: 'Low' },
-  { pair: ['USDC'],         name: 'stUSDC staking',  apy: 11.2, tvl: 92_100_000, type: 'Staking', risk: 'Low' },
-  { pair: ['WETH','USDC'],  name: 'WETH / USDC',     apy: 18.3, tvl: 6_800_000,  type: 'LP',      risk: 'Medium' },
-  { pair: ['WBTC','USDC'],  name: 'WBTC / USDC',     apy: 15.1, tvl: 4_400_000,  type: 'LP',      risk: 'Medium' },
-  { pair: ['USDC'],         name: 'USDC Lending',    apy: 5.9,  tvl: 26_700_000, type: 'Lending', risk: 'Low' },
-  { pair: ['MIRA','USDC'],  name: 'MIRA / USDC',     apy: 42.6, tvl: 1_900_000,  type: 'LP',      risk: 'High',  boost: true },
-  { pair: ['EURC','USDC'],  name: 'EURC / USDC',     apy: 28.2, tvl: 2_100_000,  type: 'LP',      risk: 'Medium' },
+  {
+    pair:    ['USDC', 'EURC'],
+    name:    'USDC / EURC',
+    apy:     6.4,
+    tvl:     2_800_000,
+    type:    'Stable',
+    risk:    'Low',
+    pool:    '0x95aF759ec2f4385EdBbBA959A8a1CDc65610D080',
+    protocol: 'CurveStableSwap',
+  },
+  {
+    pair:    ['USDC'],
+    name:    'USDC Staking',
+    apy:     5.9,
+    tvl:     26_700_000,
+    type:    'Staking',
+    risk:    'Low',
+    pool:    null,
+    protocol: 'Circle Yield',
+    comingSoon: true,
+  },
 ];
 
-const tvlFmt = n => n >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : '$' + (n / 1e3).toFixed(0) + 'K';
+const tvlFmt  = n => n >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : '$' + (n / 1e3).toFixed(0) + 'K';
 const riskColor = r => r === 'Low' ? 'text-teal-400' : r === 'Medium' ? 'text-amber-300' : 'text-rose-300';
 
 function DepositModal({ pool, onClose, onConfirm, balances }) {
@@ -98,13 +114,23 @@ function DepositModal({ pool, onClose, onConfirm, balances }) {
               <span className="text-white/50">Unlock</span>
               <span className="mono text-white/80">Anytime</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-white/50">Protocol</span>
+              <span className="mono text-white/80">{pool.protocol}</span>
+            </div>
           </div>
 
-          <button disabled={!amtNum || insufficient}
-                  onClick={() => onConfirm(pool, amtNum, depSym)}
-                  className={`w-full py-3.5 rounded-xl font-semibold text-[13.5px] ${!amtNum || insufficient ? 'bg-white/[0.04] text-white/30 cursor-not-allowed' : 'grad-btn'}`}>
-            {!amtNum ? 'Enter an amount' : insufficient ? `Insufficient ${depSym}` : `Deposit ${amt} ${depSym}`}
-          </button>
+          {pool.comingSoon ? (
+            <div className="w-full py-3.5 rounded-xl bg-white/[0.04] text-white/30 text-[13.5px] text-center font-semibold">
+              Coming soon
+            </div>
+          ) : (
+            <button disabled={!amtNum || insufficient}
+                    onClick={() => onConfirm(pool, amtNum, depSym)}
+                    className={`w-full py-3.5 rounded-xl font-semibold text-[13.5px] ${!amtNum || insufficient ? 'bg-white/[0.04] text-white/30 cursor-not-allowed' : 'grad-btn'}`}>
+              {!amtNum ? 'Enter an amount' : insufficient ? `Insufficient ${depSym}` : `Deposit ${amt} ${depSym}`}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -112,11 +138,8 @@ function DepositModal({ pool, onClose, onConfirm, balances }) {
 }
 
 export default function EarnView({ onDeposit, balances }) {
-  const [cat, setCat] = useState('all');
   const [depositPool, setDepositPool] = useState(null);
 
-  const cats = ['all', 'LP', 'Stable', 'Staking', 'Lending'];
-  const filtered = cat === 'all' ? POOLS : POOLS.filter(p => p.type === cat);
   const totalTvl = POOLS.reduce((a, p) => a + p.tvl, 0);
   const avgApy   = POOLS.reduce((a, p) => a + p.apy, 0) / POOLS.length;
 
@@ -134,7 +157,7 @@ export default function EarnView({ onDeposit, balances }) {
             Put your USDC to <span className="grad-text font-medium">work</span>
           </h1>
           <p className="text-white/55 text-[13.5px] mt-2 max-w-lg">
-            Curated yield opportunities across Arc pools, stable rails and USDC staking. You stay in full control of your funds at all times.
+            Real yield opportunities on Arc Testnet. USDC/EURC liquidity on CurveStableSwap. More protocols coming soon.
           </p>
         </div>
         <div className="flex gap-4 shrink-0">
@@ -149,19 +172,6 @@ export default function EarnView({ onDeposit, balances }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        {cats.map(c => (
-          <button key={c} onClick={() => setCat(c)}
-                  className={`px-3 py-1.5 rounded-full text-[12px] card-stroke capitalize ${cat === c ? 'bg-teal-400/15 text-teal-300' : 'bg-white/[0.03] text-white/60 hover:text-white'}`}>
-            {c === 'all' ? 'All' : c}
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/[0.03] card-stroke text-[12px] text-white/55">
-          <Icons.Search size={12} className="text-white/40"/>
-          <input placeholder="Search pools" className="bg-transparent outline-none w-36 placeholder-white/30"/>
-        </div>
-      </div>
-
       <div className="rounded-3xl bg-[#0F1E2E]/70 backdrop-blur card-stroke shadow-card overflow-hidden">
         <div className="overflow-x-auto">
         <div className="min-w-[640px]">
@@ -173,7 +183,7 @@ export default function EarnView({ onDeposit, balances }) {
           <div>Risk</div>
           <div className="w-24 text-right">Action</div>
         </div>
-        {filtered.map(p => (
+        {POOLS.map(p => (
           <div key={p.name} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] px-5 py-4 items-center hover:bg-white/[0.02] border-b border-white/[0.04] last:border-b-0">
             <div className="flex items-center gap-3">
               <div className="flex -space-x-2">
@@ -182,13 +192,13 @@ export default function EarnView({ onDeposit, balances }) {
               <div>
                 <div className="text-[14px] font-medium flex items-center gap-2">
                   {p.name}
-                  {p.boost && (
-                    <span className="text-[9.5px] mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-teal-400/15 text-teal-300 flex items-center gap-1">
-                      <Icons.Zap size={9} fill="#5EEAD4" stroke="#5EEAD4"/>Boosted
+                  {p.comingSoon && (
+                    <span className="text-[9.5px] mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-white/40">
+                      Soon
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] mono text-white/40">Arc DEX · MiraPool</div>
+                <div className="text-[11px] mono text-white/40">{p.protocol}</div>
               </div>
             </div>
             <div>
@@ -204,8 +214,9 @@ export default function EarnView({ onDeposit, balances }) {
             </div>
             <div className="w-24 text-right">
               <button onClick={() => setDepositPool(p)}
-                      className="grad-btn px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold">
-                Deposit
+                      className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold ${p.comingSoon ? 'bg-white/[0.04] text-white/30 cursor-not-allowed' : 'grad-btn'}`}
+                      disabled={p.comingSoon}>
+                {p.comingSoon ? 'Soon' : 'Deposit'}
               </button>
             </div>
           </div>

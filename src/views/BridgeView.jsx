@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { erc20Abi, parseUnits } from "viem";
+import { erc20Abi } from "viem";
 import { Icons, TokenLogo } from "../components/Icons";
 import { fmt, fmtUSD } from "../utils/tokens";
-import { Blockchain } from "@circle-fin/app-kit";
-import { BRIDGE_CONTRACT } from "../utils/constants";
 
-// Circle's official USDC contract on Ethereum Sepolia testnet
-const SEPOLIA_USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+// Sepolia USDC balance read (display only — approval handled inside useArcKit.bridge)
+const SEPOLIA_USDC     = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
 const SEPOLIA_CHAIN_ID = 11155111;
 
 const STEP_LABELS = ['Lock', 'Relay', 'Mint', 'Arrived'];
@@ -28,109 +26,53 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
   const [step, setStep]           = useState(0);
   const [bridgeErr, setBridgeErr] = useState(null);
 
-  // Fetch Sepolia USDC balance — explicit chainId ensures this works regardless of connected chain
+  // Sepolia USDC balance — display only
   const { data: rawBalance, refetch: refetchBridgeBal } = useReadContract({
-    address: SEPOLIA_USDC,
-    abi: erc20Abi,
+    address:  SEPOLIA_USDC,
+    abi:      erc20Abi,
     functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    chainId: SEPOLIA_CHAIN_ID,
-    query: { enabled: !!address, refetchInterval: 8000 },
+    args:     address ? [address] : undefined,
+    chainId:  SEPOLIA_CHAIN_ID,
+    query:    { enabled: !!address, refetchInterval: 8000 },
   });
 
-  // Check Sepolia USDC allowance for the Circle bridge contract
-  const amtRaw = (() => { try { return amt ? parseUnits(amt, 6) : 0n; } catch { return 0n; } })();
-  const { data: bridgeAllowance, refetch: refetchAllowance } = useReadContract({
-    address: SEPOLIA_USDC,
-    abi: erc20Abi,
-    functionName: "allowance",
-    args: address ? [address, BRIDGE_CONTRACT] : undefined,
-    chainId: SEPOLIA_CHAIN_ID,
-    query: { enabled: !!address, staleTime: 4000 },
-  });
-  const needsBridgeApproval = !!address && bridgeAllowance != null && amtRaw > 0n && bridgeAllowance < amtRaw;
-
-  // Approval write (Sepolia USDC → bridge contract)
-  const { writeContractAsync: approveAsync, isPending: isApprovePending } = useWriteContract();
-  const [approveTxHash, setApproveTxHash] = useState(undefined);
-  const { isSuccess: isApproveConfirmed, isLoading: isWaitApprove } = useWaitForTransactionReceipt({
-    hash: approveTxHash,
-    chainId: SEPOLIA_CHAIN_ID,
-    query: { enabled: !!approveTxHash },
-  });
-  const isApproving = isApprovePending || isWaitApprove;
-
-  const handleApprove = async () => {
-    setBridgeErr(null);
-    try {
-      const hash = await approveAsync({
-        address: SEPOLIA_USDC,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [BRIDGE_CONTRACT, amtRaw],
-        chainId: SEPOLIA_CHAIN_ID,
-      });
-      setApproveTxHash(hash);
-    } catch (err) {
-      const msg = String(err?.message ?? '');
-      setBridgeErr(
-        msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
-          ? 'Approval rejected by wallet'
-          : 'Approval failed. Please try again.'
-      );
-    }
-  };
-
-  // USDC has 6 decimals
   const sepoliaBalance = rawBalance != null ? Number(rawBalance) / 1e6 : null;
-
-  const amtNum     = parseFloat(amt) || 0;
-  const receiveAmt = amtNum * 0.998;
-  const fee        = 1.20;
-
-  const insufficient = sepoliaBalance != null && amtNum > 0 && amtNum > sepoliaBalance;
-  const canBridge    = isConnected && amtNum > 0 && !insufficient && step === 0
-    && (!needsBridgeApproval || isApproveConfirmed);
+  const amtNum         = parseFloat(amt) || 0;
+  const receiveAmt     = amtNum * 0.998;
+  const fee            = 1.20;
+  const insufficient   = sepoliaBalance != null && amtNum > 0 && amtNum > sepoliaBalance;
+  const canBridge      = isConnected && amtNum > 0 && !insufficient && step === 0;
 
   const startBridge = async () => {
     if (!canBridge) return;
     setBridgeErr(null);
     setStep(1);
     try {
-      setStep(2);
       const bridgeResult = await arcKit.bridge({
-        fromChain: Blockchain.Ethereum_Sepolia,
-        toChain:   Blockchain.Arc_Testnet,
-        amount:    amt,
-        token:     'USDC',
+        amount:     amt,
+        onProgress: (s) => setStep(s),
       });
-      const bridgeHash =
-        bridgeResult?.txHash ||
-        bridgeResult?.hash ||
-        bridgeResult?.transactionHash ||
-        bridgeResult?.receipt?.transactionHash ||
-        bridgeResult?.receipt?.hash ||
-        null;
+
+      const bridgeHash = bridgeResult?.txHash || null;
       console.log('[MiraRoute] bridge result:', bridgeResult, '→ hash:', bridgeHash);
-      setStep(3);
-      setTimeout(() => {
-        setStep(4);
-        try {
-          const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
-          history.unshift({ type: 'Bridge', amount: amtNum, sym: 'USDC', fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash, date: Date.now() });
-          localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
-        } catch {}
-        onBridge?.({ sym: 'USDC', amount: amtNum, fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash });
-        onToast?.(`Bridged ${amt} USDC → Arc Testnet via Circle CCTP`);
-        refetchBridgeBal(); refetchAllowance();
-        setTimeout(() => { setStep(0); setAmt(''); }, 4000);
-      }, 600);
+
+      setStep(4);
+      try {
+        const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
+        history.unshift({ type: 'Bridge', amount: amtNum, sym: 'USDC', fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash, date: Date.now() });
+        localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
+      } catch {}
+
+      onBridge?.({ sym: 'USDC', amount: amtNum, fromChain: 'ETH', toChain: 'ARC', hash: bridgeHash });
+      onToast?.(`Bridged ${amt} USDC → Arc Testnet via Circle CCTP`);
+      refetchBridgeBal();
+      setTimeout(() => { setStep(0); setAmt(''); }, 4000);
     } catch (err) {
       const msg = String(err?.message ?? '');
       setBridgeErr(
         msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
           ? 'Transaction rejected by wallet'
-          : err?.message ?? 'Bridge failed. Please try again.'
+          : msg || 'Bridge failed. Please try again.'
       );
       setStep(0);
     }
@@ -221,7 +163,6 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
               className="flex-1 min-w-0 bg-transparent text-[36px] font-light outline-none placeholder-white/15 tracking-tight"
               placeholder="0"
             />
-            {/* Token locked to USDC — CCTP only supports USDC */}
             <div className="flex items-center gap-2 pl-2 pr-3 py-2 rounded-full shrink-0"
                  style={{ background: 'rgba(255,255,255,.07)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.1)' }}>
               <TokenLogo sym="USDC" size={24}/>
@@ -271,7 +212,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
             </div>
             <div className="col-span-2">
               <div className="text-white/40 text-[11px] mono mb-0.5">Protocol</div>
-              <div className="mono text-white/75">ETH Sepolia → Circle CCTP → Arc Testnet</div>
+              <div className="mono text-white/75">ETH Sepolia → Circle CCTP v2 → Arc Testnet</div>
             </div>
           </div>
         </div>
@@ -297,7 +238,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
             </div>
             <div className="flex items-center">
               {STEP_LABELS.map((label, i) => {
-                const done   = step > i + 1 || (step === 4 && i === 3);
+                const done   = step > i + 1 || step === 4;
                 const active = step === i + 1;
                 return (
                   <div key={label} className="flex items-center flex-1 last:flex-none">
@@ -319,28 +260,17 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
           </div>
         )}
 
-        {/* Bridge / Approve button */}
+        {/* Bridge button */}
         {!isConnected ? (
           <button onClick={openConnectModal}
                   className="w-full py-4 rounded-2xl font-semibold text-[14.5px] grad-btn">
             Connect Wallet
           </button>
-        ) : isApproving ? (
+        ) : step > 0 && step < 4 ? (
           <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14.5px] relative overflow-hidden shimmer text-[#07261F]">
             <span className="relative z-10 flex items-center justify-center gap-2">
               <span className="inline-block w-4 h-4 border-2 border-[#07261F]/60 border-t-transparent rounded-full spin-slow"/>
-              Approving USDC in wallet…
-            </span>
-          </button>
-        ) : needsBridgeApproval && !isApproveConfirmed ? (
-          <button onClick={handleApprove}
-                  disabled={!amtNum || insufficient}
-                  className={`w-full py-4 rounded-2xl font-semibold text-[14.5px] tracking-tight transition-all ${
-                    !amtNum || insufficient ? 'bg-white/[0.04] text-white/25 cursor-not-allowed' : 'grad-btn'
-                  }`}>
-            <span className="flex items-center justify-center gap-2">
-              <Icons.Check size={15} stroke="currentColor"/>
-              Approve USDC for Bridge
+              {step === 1 ? 'Approving USDC…' : step === 2 ? 'Locking on Sepolia…' : step === 3 ? 'Waiting for attestation…' : 'Minting on Arc…'}
             </span>
           </button>
         ) : (
@@ -349,12 +279,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
                   className={`w-full py-4 rounded-2xl font-semibold text-[14.5px] tracking-tight transition-all ${
                     !canBridge ? 'bg-white/[0.04] text-white/25 cursor-not-allowed' : 'grad-btn'
                   }`}>
-            {step > 0 ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="inline-block w-4 h-4 border-2 border-[#07261F]/60 border-t-transparent rounded-full spin-slow"/>
-                Bridging…
-              </span>
-            ) : insufficient ? 'Insufficient USDC Balance'
+            {insufficient ? 'Insufficient USDC Balance'
               : !amtNum ? 'Enter an amount' : (
               <span className="flex items-center justify-center gap-2">
                 <Icons.ArrowDown size={15} stroke="currentColor" className="-rotate-90"/>
@@ -364,7 +289,6 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
           </button>
         )}
 
-        {/* CCTP note */}
         <div className="flex items-center gap-1.5 text-[11px] mono text-white/35 px-1">
           <Icons.Info size={11} className="shrink-0"/>
           CCTP only bridges stablecoins. To bridge ETH, swap it to USDC on Ethereum first.
@@ -372,7 +296,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
 
         <div className="flex items-center justify-between text-[10.5px] mono text-white/30 px-1">
           <span className="flex items-center gap-1.5"><Icons.Shield size={10}/> Canonical bridge. Protected from MEV.</span>
-          <span>Powered by Circle CCTP</span>
+          <span>Powered by Circle CCTP v2</span>
         </div>
       </div>
 

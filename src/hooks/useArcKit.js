@@ -1,7 +1,5 @@
 import { useCallback } from "react";
 import { useAccount } from "wagmi";
-import { AppKit, Blockchain } from "@circle-fin/app-kit";
-import { createAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
 import {
   createWalletClient,
   createPublicClient,
@@ -11,9 +9,10 @@ import {
   maxUint256,
   erc20Abi,
 } from "viem";
-import { arcTestnet, CONTRACTS, CURVE_USDC_EURC_POOL } from "../utils/constants";
+import { sepolia } from "wagmi/chains";
+import { arcTestnet, CONTRACTS, CURVE_USDC_EURC_POOL, CCTP } from "../utils/constants";
 
-// Proxy Circle's API through our own domain to avoid browser CORS restrictions.
+// Proxy Circle's API through our own domain to avoid CORS restrictions.
 // Vercel rewrites /api/circle-proxy/* → https://api.circle.com/*
 if (typeof window !== "undefined" && !window.__circleFetchPatched) {
   const _fetch = window.fetch.bind(window);
@@ -28,11 +27,7 @@ if (typeof window !== "undefined" && !window.__circleFetchPatched) {
   window.__circleFetchPatched = true;
 }
 
-// Circle App Kit — used only for bridge (CCTP)
-const kit = new AppKit();
-const KIT_KEY = import.meta.env.VITE_CIRCLE_KIT_KEY;
-
-// ── Curve StableSwap ABI (direct pool: coins[0]=EURC, coins[1]=USDC) ────────────
+// ── Curve StableSwap ABI — coins[0]=EURC, coins[1]=USDC ──────────────────────
 const CURVE_ABI = [
   {
     name: "exchange",
@@ -59,17 +54,56 @@ const CURVE_ABI = [
   },
 ];
 
-// coins[0] = EURC, coins[1] = USDC
+// coins[0] = EURC (index 0), coins[1] = USDC (index 1)
 const COIN_INDEX = { EURC: 0n, USDC: 1n };
+
+// ── CCTP v2 ABI ───────────────────────────────────────────────────────────────
+const TOKEN_MESSENGER_ABI = [
+  {
+    name: "depositForBurn",
+    type: "function",
+    inputs: [
+      { name: "amount",               type: "uint256" },
+      { name: "destinationDomain",    type: "uint32"  },
+      { name: "mintRecipient",        type: "bytes32" },
+      { name: "burnToken",            type: "address" },
+      { name: "destinationCaller",    type: "bytes32" },
+      { name: "maxFee",               type: "uint256" },
+      { name: "minFinalityThreshold", type: "uint32"  },
+    ],
+    outputs: [{ type: "uint64" }],
+    stateMutability: "nonpayable",
+  },
+];
+
+const MESSAGE_TRANSMITTER_ABI = [
+  {
+    name: "receiveMessage",
+    type: "function",
+    inputs: [
+      { name: "message",     type: "bytes" },
+      { name: "attestation", type: "bytes" },
+    ],
+    outputs: [{ type: "bool" }],
+    stateMutability: "nonpayable",
+  },
+];
+
+// Sepolia USDC address (Circle official)
+const SEPOLIA_USDC  = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+const SEPOLIA_DOMAIN = 0;
+const ZERO_BYTES32   = `0x${"0".repeat(64)}`;
+// Circle CCTP attestation API (testnet)
+const ATTESTATION_API = "https://iris-api-sandbox.circle.com/v2/messages";
 
 export function useArcKit() {
   const { connector, isConnected, address } = useAccount();
 
-  // ── Direct Curve pool swap (USDC ↔ EURC, no routing middleware) ──────────────
+  // ── Direct Curve pool swap (USDC ↔ EURC) ─────────────────────────────────
   const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, slippageBps = 50 }) => {
     if (!connector || !address) throw new Error("Wallet not connected");
 
-    const provider   = await connector.getProvider();
+    const provider    = await connector.getProvider();
     const walletClient = createWalletClient({
       account:   address,
       chain:     arcTestnet,
@@ -93,10 +127,9 @@ export function useArcKit() {
       args:         [i, j, amountRaw],
     });
 
-    // Apply slippage tolerance
     const minOut = expectedOut * BigInt(10000 - slippageBps) / 10000n;
 
-    // Check allowance — approve with maxUint256 once if needed
+    // Approve once (maxUint256) if allowance is insufficient
     const allowance = await publicClient.readContract({
       address:      tokenInAddr,
       abi:          erc20Abi,
@@ -111,13 +144,10 @@ export function useArcKit() {
         functionName: "approve",
         args:         [CURVE_USDC_EURC_POOL, maxUint256],
       });
-      // Wait for confirmation, but don't throw if polling times out
-      try {
-        await publicClient.waitForTransactionReceipt({ hash: approveTx, timeout: 30_000 });
-      } catch {}
+      try { await publicClient.waitForTransactionReceipt({ hash: approveTx, timeout: 30_000 }); } catch {}
     }
 
-    // Execute swap directly on Curve pool
+    // Execute swap directly on CurveStableSwap
     const txHash = await walletClient.writeContract({
       address:      CURVE_USDC_EURC_POOL,
       abi:          CURVE_ABI,
@@ -128,29 +158,95 @@ export function useArcKit() {
     return { txHash };
   }, [connector, address]);
 
-  // ── Bridge (CCTP via Circle SDK) ─────────────────────────────────────────────
-  const getAdapter = useCallback(async () => {
-    if (!connector) throw new Error("Wallet not connected");
-    const provider = await connector.getProvider();
-    return createAdapterFromProvider({ provider });
-  }, [connector]);
+  // ── Direct CCTP v2 bridge (Sepolia → Arc Testnet) ────────────────────────
+  const bridge = useCallback(async ({ amount, onProgress }) => {
+    if (!connector || !address) throw new Error("Wallet not connected");
 
-  const bridge = useCallback(async ({ fromChain, toChain, amount, token = "USDC" }) => {
-    const adapter = await getAdapter();
-    try {
-      return await kit.bridge({
-        from:   { adapter, chain: fromChain },
-        to:     { adapter, chain: toChain },
-        amount: amount.toString(),
-        token,
-        config: { kitKey: KIT_KEY },
+    const provider = await connector.getProvider();
+
+    // Sepolia walletClient + publicClient
+    const sepoliaWallet = createWalletClient({
+      account:   address,
+      chain:     sepolia,
+      transport: custom(provider),
+    });
+    const sepoliaPublic = createPublicClient({
+      chain:     sepolia,
+      transport: http(),
+    });
+
+    const amountRaw = parseUnits(amount.toString(), 6);
+
+    // Step 1 — Approve USDC to TokenMessenger on Sepolia (once)
+    onProgress?.(1);
+    const allowance = await sepoliaPublic.readContract({
+      address:      SEPOLIA_USDC,
+      abi:          erc20Abi,
+      functionName: "allowance",
+      args:         [address, CCTP.TOKEN_MESSENGER],
+    });
+
+    if (allowance < amountRaw) {
+      const approveTx = await sepoliaWallet.writeContract({
+        address:      SEPOLIA_USDC,
+        abi:          erc20Abi,
+        functionName: "approve",
+        args:         [CCTP.TOKEN_MESSENGER, maxUint256],
       });
-    } catch (err) {
-      const hash = err?.txHash || err?.sourceTxHash || err?.details?.txHash || null;
-      if (hash) return { txHash: hash, partialResult: true };
-      throw err;
+      await sepoliaPublic.waitForTransactionReceipt({ hash: approveTx });
     }
-  }, [getAdapter]);
+
+    // Step 2 — depositForBurn on Sepolia
+    onProgress?.(2);
+    const mintRecipient = `0x${address.slice(2).padStart(64, "0")}`;
+    const burnTxHash = await sepoliaWallet.writeContract({
+      address:      CCTP.TOKEN_MESSENGER,
+      abi:          TOKEN_MESSENGER_ABI,
+      functionName: "depositForBurn",
+      args: [
+        amountRaw,
+        CCTP.ARC_DOMAIN,      // destination: Arc Testnet domain 26
+        mintRecipient,        // recipient in bytes32
+        SEPOLIA_USDC,         // USDC to burn on Sepolia
+        ZERO_BYTES32,         // any caller can relay
+        0n,                   // no max fee
+        1000,                 // fast transfer threshold
+      ],
+    });
+    await sepoliaPublic.waitForTransactionReceipt({ hash: burnTxHash });
+
+    // Step 3 — Poll Circle attestation API (~2–4 min)
+    onProgress?.(3);
+    let attestationMsg = null;
+    for (let attempts = 0; attempts < 72; attempts++) {   // 6 min max
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        const res  = await fetch(`${ATTESTATION_API}/${SEPOLIA_DOMAIN}?transactionHash=${burnTxHash}`);
+        const data = await res.json();
+        if (data?.messages?.[0]?.status === "complete") {
+          attestationMsg = data.messages[0];
+          break;
+        }
+      } catch {}
+    }
+    if (!attestationMsg) throw new Error("Attestation timed out. Check ArcScan for mint status.");
+
+    // Step 4 — receiveMessage on Arc Testnet (mints USDC)
+    onProgress?.(4);
+    const arcWallet = createWalletClient({
+      account:   address,
+      chain:     arcTestnet,
+      transport: custom(provider),
+    });
+    const mintTxHash = await arcWallet.writeContract({
+      address:      CCTP.MESSAGE_TRANSMITTER,
+      abi:          MESSAGE_TRANSMITTER_ABI,
+      functionName: "receiveMessage",
+      args:         [attestationMsg.message, attestationMsg.attestation],
+    });
+
+    return { txHash: mintTxHash, burnTxHash };
+  }, [connector, address]);
 
   return { swap, bridge, isReady: isConnected };
 }
