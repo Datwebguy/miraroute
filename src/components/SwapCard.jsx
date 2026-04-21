@@ -11,15 +11,24 @@ import { getToken, fmt, fmtUSD } from "../utils/tokens";
 import { FastModeBadge } from "./RoutePreview";
 import RoutePreview from "./RoutePreview";
 import { arcTestnet, CONTRACTS, ARC_ADAPTER } from "../utils/constants";
-import { adapterContractAbi } from "../utils/swapAbi";
-import { fetchSwapTx } from "../utils/fetchSwapTx";
+import { useArcKit } from "../hooks/useArcKit";
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function safeParseUnits(str) {
   try { return str && parseFloat(str) > 0 ? parseUnits(str, 6) : 0n; }
   catch { return 0n; }
 }
 
-// ─── Sub-components (UI only, no state) ─────────────────────────────────────
+function saveMiraHistory(entry) {
+  try {
+    const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
+    history.unshift(entry);
+    localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
+  } catch {}
+}
+
+// ─── sub-components (display only) ───────────────────────────────────────────
 
 function LiveBadge({ live }) {
   if (live) return (
@@ -189,30 +198,27 @@ export function AdvancedSettings({ open, onToggle, slippage, onSlippage, gas, on
   );
 }
 
-// ─── Main SwapCard ────────────────────────────────────────────────────────────
+// ─── SwapCard ─────────────────────────────────────────────────────────────────
 
 export default function SwapCard({
   fromSym, toSym, amount, setAmount, setFromSym, setToSym,
   balances, onOpenPicker,
   fastMode, slippage, setSlippage, autoSlip, setAutoSlip,
   gas, setGas, recipient, setRecipient, isConnected, onConnect,
-  onSuccess,   // (txHash: string) => void — called after swap receipt confirmed
+  onSuccess,   // (txHash: string) => void
 }) {
   const { address } = useAccount();
+  const arcKit = useArcKit();
 
-  // UI-only state
-  const [advOpen,   setAdvOpen]   = useState(false);
-  const [routeOpen, setRouteOpen] = useState(true);
-  const [swapError, setSwapError] = useState(null);
-  const [isFetching, setIsFetching] = useState(false);
-
-  // Tx hash slots for the two write hooks
+  const [advOpen,    setAdvOpen]    = useState(false);
+  const [routeOpen,  setRouteOpen]  = useState(true);
+  const [swapError,  setSwapError]  = useState(null);
+  const [isExecuting, setIsExecuting] = useState(false);  // arcKit.swap() in flight
   const [approveTxHash, setApproveTxHash] = useState(undefined);
-  const [executeTxHash, setExecuteTxHash] = useState(undefined);
 
-  // Derived display values
-  const fromT     = getToken(fromSym);
-  const toT       = getToken(toSym);
+  // ── display values ────────────────────────────────────────────────────────────
+  const fromT      = getToken(fromSym);
+  const toT        = getToken(toSym);
   const isLivePair = fromT.live && toT.live;
   const amountNum  = parseFloat(amount) || 0;
   const amountOut  = amountNum * (fromT.price / toT.price) * 0.999;
@@ -225,7 +231,7 @@ export default function SwapCard({
   const amountRaw   = safeParseUnits(amount);
   const tokenInAddr = CONTRACTS[fromSym];
 
-  // ── Hook 1: useReadContract — check allowance ────────────────────────────────
+  // ── Hook 1: useReadContract — current allowance ───────────────────────────────
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address:      tokenInAddr,
     abi:          erc20Abi,
@@ -238,11 +244,11 @@ export default function SwapCard({
   const needsApproval =
     !!address && allowance !== undefined && amountRaw > 0n && allowance < amountRaw;
 
-  // ── Hook 2: useWriteContract — Approve ──────────────────────────────────────
+  // ── Hook 2: useWriteContract — Approve ───────────────────────────────────────
   const { writeContractAsync: approveAsync, isPending: isApprovePending } = useWriteContract();
 
-  // ── Hook 3: useWaitForTransactionReceipt — wait for Approval ────────────────
-  const { isSuccess: isApproveConfirmed, isLoading: isWaitingApprove } =
+  // ── Hook 3: useWaitForTransactionReceipt — wait for Approval ─────────────────
+  const { isLoading: isWaitingApprove, isSuccess: isApproveConfirmed } =
     useWaitForTransactionReceipt({
       hash:    approveTxHash,
       chainId: arcTestnet.id,
@@ -254,58 +260,67 @@ export default function SwapCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isApproveConfirmed, approveTxHash]);
 
-  // ── Hook 4: useWriteContract — Execute swap ──────────────────────────────────
-  const { writeContractAsync: executeAsync, isPending: isExecutePending } = useWriteContract();
-
-  const { isSuccess: isSwapConfirmed, data: swapReceipt } =
-    useWaitForTransactionReceipt({
-      hash:    executeTxHash,
-      chainId: arcTestnet.id,
-      query:   { enabled: !!executeTxHash },
-    });
-
-  // ── On swap confirmed ────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isSwapConfirmed || !swapReceipt) return;
-
-    const txHash = swapReceipt.transactionHash;
-
-    // Save to miraHistory (exact format from spec)
-    const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
-    history.unshift({
-      type:      'Swap',
-      amount:    amountNum,
-      amountIn:  amountNum,
-      amountOut,
-      fromSym,
-      toSym,
-      hash:      txHash,  // receipt.transactionHash
-      date:      Date.now(),
-    });
-    localStorage.setItem('miraHistory', JSON.stringify(history.slice(0, 100)));
-
-    // Notify App.jsx — explorer link uses https://testnet.arcscan.app/tx/${txHash}
-    onSuccess?.(txHash);
-
-    // Reset for next swap
-    setExecuteTxHash(undefined);
-    setApproveTxHash(undefined);
+  // ── Hook 4 trigger: arcKit.swap() — executes the swap on Arc ─────────────────
+  // arcKit.swap() internally calls the Circle API with proper auth + encoding,
+  // then submits via walletClient.writeContract() → eth_sendTransaction.
+  const runSwap = async () => {
+    setIsExecuting(true);
     setSwapError(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSwapConfirmed, swapReceipt]);
+    try {
+      const result = await arcKit.swap({
+        tokenIn:     fromSym,
+        tokenOut:    toSym,
+        amountIn:    amount,
+        slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
+      });
 
-  // ── Derived busy/status ───────────────────────────────────────────────────────
+      // Circle SDK v1.3.0 returns { txHash } as primary field
+      const txHash =
+        result?.txHash           ??
+        result?.hash             ??
+        result?.transactionHash  ??
+        result?.receipt?.transactionHash ??
+        null;
+
+      console.log('[MiraRoute] swap result:', result, '→ hash:', txHash);
+
+      // Persist to miraHistory — explorer link: https://testnet.arcscan.app/tx/${txHash}
+      saveMiraHistory({
+        type:      'Swap',
+        amount:    amountNum,
+        amountIn:  amountNum,
+        amountOut,
+        fromSym,
+        toSym,
+        hash:      txHash,
+        date:      Date.now(),
+      });
+
+      onSuccess?.(txHash);
+    } catch (err) {
+      const msg = String(err?.message ?? err ?? '');
+      console.error('[MiraRoute swap error]', err);
+      setSwapError(
+        msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
+          ? 'Transaction rejected by wallet'
+          : msg ? `Swap error: ${msg.slice(0, 100)}` : 'Swap failed. Try again.'
+      );
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  // ── Derived busy state ────────────────────────────────────────────────────────
   const isApproving = isApprovePending || isWaitingApprove;
-  const isExecuting = isFetching || isExecutePending;
   const isBusy      = isApproving || isExecuting;
 
-  // ── Action handler ────────────────────────────────────────────────────────────
+  // ── Main action handler ───────────────────────────────────────────────────────
   const handleAction = async () => {
     if (!isConnected) { onConnect?.(); return; }
     setSwapError(null);
 
     if (needsApproval) {
-      // ── Step 2: Approve tokenIn ────────────────────────────────────────────
+      // Hook 2: Approve tokenIn spending
       try {
         const hash = await approveAsync({
           address:      tokenInAddr,
@@ -324,56 +339,28 @@ export default function SwapCard({
         );
       }
     } else {
-      // ── Step 4: Execute swap via Circle adapter ────────────────────────────
-      setIsFetching(true);
-      try {
-        const { executeParams, tokenInputs, signature, nativeValue } = await fetchSwapTx({
-          tokenIn:     fromSym,
-          tokenOut:    toSym,
-          amount,
-          fromAddress: address,
-          slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
-        });
-        setIsFetching(false);
-        const hash = await executeAsync({
-          address:      ARC_ADAPTER,
-          abi:          adapterContractAbi,
-          functionName: 'execute',
-          args:         [executeParams, tokenInputs, signature],
-          value:        nativeValue,
-          chainId:      arcTestnet.id,
-        });
-        setExecuteTxHash(hash);
-      } catch (err) {
-        setIsFetching(false);
-        const msg = String(err?.message ?? err ?? '');
-        console.error('[MiraRoute swap error]', err);
-        setSwapError(
-          msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
-            ? 'Transaction rejected by wallet'
-            : msg ? `Swap error: ${msg.slice(0, 100)}` : 'Swap failed. Try again.'
-        );
-      }
+      // Hook 4: Execute swap
+      await runSwap();
     }
   };
 
   const flip = () => { setFromSym(toSym); setToSym(fromSym); setAmount(''); };
 
   // ── Button label ──────────────────────────────────────────────────────────────
-  //   allowance < amount  → "Approve USDC"     (Hook 2)
-  //   Hook 3 isLoading    → "Approving..."     (disabled)
-  //   allowance >= amount → "Swap"             (Hook 4)
-  //   Hook 4 pending      → "Confirm in Wallet..."
+  //  allowance < amount    → "Approve USDC"         (triggers Hook 2)
+  //  Hook 3 isLoading      → "Approving..."         (disabled)
+  //  allowance >= amount   → "Swap / Fast Mode"     (triggers Hook 4)
+  //  Hook 4 in flight      → "Confirm in Wallet..."  (disabled)
   const btnLabel =
-    !isConnected                     ? 'Connect wallet'
-    : !isLivePair && amountNum > 0   ? 'Demo only. Live swaps need USDC or EURC.'
-    : amountNum === 0                ? 'Enter an amount'
-    : insufficient                   ? `Insufficient ${fromSym}`
-    : isApproving                    ? 'Approving...'
-    : isExecuting                    ? 'Confirm in Wallet...'
-    : needsApproval                  ? `Approve ${fromSym}`
-    : fastMode                       ? 'Swap via Fast Mode'
-    :                                  `Swap ${fromSym} → ${toSym} on Arc`;
+    !isConnected                   ? 'Connect wallet'
+    : !isLivePair && amountNum > 0 ? 'Demo only — Live swaps need USDC or EURC'
+    : amountNum === 0              ? 'Enter an amount'
+    : insufficient                 ? `Insufficient ${fromSym}`
+    : isApproving                  ? 'Approving...'
+    : isExecuting                  ? 'Confirm in Wallet...'
+    : needsApproval                ? `Approve ${fromSym}`
+    : fastMode                     ? 'Swap via Fast Mode'
+    :                                `Swap ${fromSym} → ${toSym} on Arc`;
 
   const btnDisabled = isConnected && (
     isBusy || amountNum === 0 || insufficient || (!isLivePair && amountNum > 0)
@@ -385,6 +372,7 @@ export default function SwapCard({
            style={{ background: 'radial-gradient(circle at 50% 0%, rgba(45,212,191,.16), transparent 65%)' }}/>
 
       <div className="relative rounded-[24px] bg-[#0F1E2E]/90 backdrop-blur card-stroke shadow-card p-5 space-y-3 swap-glass">
+
         {/* Header */}
         <div className="flex items-center justify-between px-1 pt-0.5 pb-1">
           <div className="flex items-center gap-2">
@@ -392,7 +380,8 @@ export default function SwapCard({
             <FastModeBadge visible={fastMode}/>
             <LiveBadge live={isLivePair}/>
           </div>
-          <button title="Refresh" className="p-1.5 rounded-lg hover:bg-white/5 text-white/50 hover:text-white transition">
+          <button title="Refresh" onClick={() => refetchAllowance()}
+                  className="p-1.5 rounded-lg hover:bg-white/5 text-white/50 hover:text-white transition">
             <Icons.Refresh size={14}/>
           </button>
         </div>
@@ -436,10 +425,11 @@ export default function SwapCard({
             slippage={autoSlip ? 0.5 : slippage} gas={gas}/>
         )}
 
-        {/* Primary button */}
+        {/* Primary action button */}
         <div className="pt-1">
           {isBusy ? (
-            <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
+            <button disabled
+                    className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
               <span className="relative z-10 flex items-center justify-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
                 {btnLabel}
