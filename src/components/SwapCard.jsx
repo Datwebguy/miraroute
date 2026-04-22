@@ -202,6 +202,8 @@ export default function SwapCard({
   const [routeOpen,   setRouteOpen]  = useState(true);
   const [swapError,   setSwapError]  = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  // 'idle' | 'approving' | 'swapping' | 'confirming'
+  const [swapStep,    setSwapStep]   = useState('idle');
 
   // ── display values ────────────────────────────────────────────────────────────
   const fromT      = getToken(fromSym);
@@ -222,38 +224,32 @@ export default function SwapCard({
   // then submits via walletClient.writeContract() → eth_sendTransaction.
   const runSwap = async () => {
     setIsExecuting(true);
+    setSwapStep('idle');
     setSwapError(null);
     try {
       const result = await arcKit.swap({
-        tokenIn:     fromSym,
-        tokenOut:    toSym,
-        amountIn:    amount,
-        slippageBps: Math.round((autoSlip ? 0.5 : slippage) * 100),
+        tokenIn:  fromSym,
+        tokenOut: toSym,
+        amountIn: amount,
+        onProgress: (step) => setSwapStep(step),
       });
 
-      // Circle SDK v1.3.0 returns { txHash } — use || so empty strings fall through
-      const txHash =
-        result?.txHash ||
-        result?.hash ||
-        result?.transactionHash ||
-        result?.receipt?.transactionHash ||
-        (result?.explorerUrl ? result.explorerUrl.split('/tx/').pop() : null) ||
-        null;
+      // result.txHash is only set after on-chain receipt.status === 'success'
+      const txHash = result?.txHash ?? null;
+      console.log('[MiraRoute] swap confirmed on-chain:', txHash);
 
-      console.log('[MiraRoute] swap result:', result, '→ hash:', txHash);
-
-      // Persist to miraHistory — explorer link: https://testnet.arcscan.app/tx/${txHash}
       saveMiraHistory({
-        type:      'Swap',
-        amount:    amountNum,
-        amountIn:  amountNum,
+        type:     'Swap',
+        amount:   amountNum,
+        amountIn: amountNum,
         amountOut,
         fromSym,
         toSym,
-        hash:      txHash,
-        date:      Date.now(),
+        hash:     txHash,
+        date:     Date.now(),
       });
 
+      setSwapStep('idle');
       onSuccess?.(txHash);
     } catch (err) {
       const msg = String(err?.message ?? err ?? '');
@@ -261,10 +257,11 @@ export default function SwapCard({
       setSwapError(
         msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
           ? 'Transaction rejected by wallet'
-          : msg ? `Swap error: ${msg.slice(0, 100)}` : 'Swap failed. Try again.'
+          : msg ? msg.slice(0, 120) : 'Swap failed. Try again.'
       );
     } finally {
       setIsExecuting(false);
+      setSwapStep('idle');
     }
   };
 
@@ -289,8 +286,10 @@ export default function SwapCard({
     : !isLivePair && amountNum > 0 ? 'Demo only — Live swaps need USDC or EURC'
     : amountNum === 0              ? 'Enter an amount'
     : insufficient                 ? `Insufficient ${fromSym}`
-    : isExecuting                  ? 'Confirm in Wallet...'
-    : fastMode                     ? 'Swap via Fast Mode'
+    : swapStep === 'approving'     ? `Approving ${fromSym}…`
+    : swapStep === 'swapping'      ? 'Confirm Swap in Wallet…'
+    : swapStep === 'confirming'    ? 'Waiting for Confirmation…'
+    : isExecuting                  ? 'Processing…'
     :                                `Swap ${fromSym} → ${toSym} on Arc`;
 
   const btnDisabled = isConnected && (

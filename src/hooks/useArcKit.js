@@ -12,14 +12,13 @@ import {
 import { sepolia } from "wagmi/chains";
 import { arcTestnet, TOKENS, CONTRACTS, STABLE_SWAP_POOL, CCTP, CHAIN } from "../utils/constants";
 
-// ── StableSwapPool ABI ────────────────────────────────────────────────────────
-// Verified pool: 0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC
-// coins[0] = USDC (i=0), coins[1] = EURC (i=1)
-// All index params use uint256 (not int128).
+// ── StableSwapPool ABI (verified from ArcScan — Solidity 0.8.20) ─────────────
+// Address: 0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC
+// tokens[0]=USDC, tokens[1]=EURC, tokens[2]=third token
+// addLiquidity is onlyOwner — users cannot deposit directly
+// No removeLiquidity function exists
 const STABLE_SWAP_ABI = [
   {
-    // Verified 3-param signature from ArcScan tx 0x8cd92b01...
-    // selector: swap(uint256,uint256,uint256)
     name: "swap", type: "function",
     inputs: [
       { name: "i",  type: "uint256" },
@@ -40,54 +39,26 @@ const STABLE_SWAP_ABI = [
     stateMutability: "view",
   },
   {
-    name: "addLiquidity", type: "function",
-    inputs: [
-      { name: "amounts",       type: "uint256[]" },
-      { name: "minMintAmount", type: "uint256"   },
-    ],
-    outputs: [{ type: "uint256" }],
-    stateMutability: "nonpayable",
-  },
-  {
-    name: "removeLiquidity", type: "function",
-    inputs: [
-      { name: "amount",     type: "uint256"   },
-      { name: "minAmounts", type: "uint256[]" },
-    ],
-    outputs: [{ type: "uint256[]" }],
-    stateMutability: "nonpayable",
-  },
-  {
-    name: "removeLiquidityOneToken", type: "function",
-    inputs: [
-      { name: "tokenAmount", type: "uint256" },
-      { name: "i",           type: "uint256" },
-      { name: "minAmount",   type: "uint256" },
-    ],
-    outputs: [{ type: "uint256" }],
-    stateMutability: "nonpayable",
-  },
-  {
     name: "balances", type: "function",
     inputs: [{ name: "i", type: "uint256" }],
     outputs: [{ type: "uint256" }],
     stateMutability: "view",
   },
   {
-    name: "get_virtual_price", type: "function",
+    name: "getBalances", type: "function",
+    inputs: [],
+    outputs: [{ type: "uint256[]" }],
+    stateMutability: "view",
+  },
+  {
+    name: "fee", type: "function",
     inputs: [],
     outputs: [{ type: "uint256" }],
     stateMutability: "view",
   },
-  {
-    name: "token", type: "function",
-    inputs: [],
-    outputs: [{ type: "address" }],
-    stateMutability: "view",
-  },
 ];
 
-// coins[0] = USDC (i=0), coins[1] = EURC (i=1)
+// coins[0]=USDC (i=0), coins[1]=EURC (i=1)
 const COIN_INDEX = { USDC: 0n, EURC: 1n };
 
 // ── CCTP v2 ABI ───────────────────────────────────────────────────────────────
@@ -119,29 +90,6 @@ const MESSAGE_TRANSMITTER_ABI = [{
 const ZERO_BYTES32    = `0x${"0".repeat(64)}`;
 const ATTESTATION_API = "https://iris-api-sandbox.circle.com/v2/messages";
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
-
-function makeArcPublic() {
-  return createPublicClient({
-    chain:     arcTestnet,
-    transport: http(CHAIN.ARC_RPC),
-  });
-}
-
-async function ensureApproval(walletClient, publicClient, tokenAddr, owner, spender, amountRaw) {
-  const allowance = await publicClient.readContract({
-    address: tokenAddr, abi: erc20Abi, functionName: 'allowance',
-    args: [owner, spender],
-  });
-  if (allowance < amountRaw) {
-    const hash = await walletClient.writeContract({
-      address: tokenAddr, abi: erc20Abi, functionName: 'approve',
-      args: [spender, amountRaw],
-    });
-    await publicClient.waitForTransactionReceipt({ hash, timeout: 60_000 });
-  }
-}
-
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useArcKit() {
@@ -149,14 +97,17 @@ export function useArcKit() {
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
 
-  // ── quote (read-only, no wallet needed) ──────────────────────────────────────
+  // ── quote (read-only) ─────────────────────────────────────────────────────────
   const quote = useCallback(async ({ tokenIn, tokenOut, amountIn }) => {
     if (!amountIn || parseFloat(amountIn) <= 0) return null;
     const amountRaw = parseUnits(amountIn.toString(), 6);
     const i = COIN_INDEX[tokenIn];
     const j = COIN_INDEX[tokenOut];
     try {
-      const out = await makeArcPublic().readContract({
+      const publicClient = createPublicClient({
+        chain: arcTestnet, transport: http(CHAIN.ARC_RPC),
+      });
+      const out = await publicClient.readContract({
         address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
         functionName: 'get_dy', args: [i, j, amountRaw],
       });
@@ -167,92 +118,68 @@ export function useArcKit() {
   }, []);
 
   // ── swap ──────────────────────────────────────────────────────────────────────
-  const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, slippageBps = 50 }) => {
+  // onProgress: 'approving' | 'swapping' | 'confirming'
+  // Returns { txHash } only after on-chain receipt confirms with status='success'
+  const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, onProgress }) => {
     if (!connector || !address) throw new Error("Wallet not connected");
 
-    const provider    = await connector.getProvider();
+    const provider = await connector.getProvider();
+
     const walletClient = createWalletClient({
       account: address, chain: arcTestnet, transport: custom(provider),
     });
-    const publicClient = makeArcPublic();
+    // Use same provider transport as wallet so polling sees the same mempool
+    const publicClient = createPublicClient({
+      chain: arcTestnet, transport: custom(provider),
+    });
 
     const amountRaw   = parseUnits(amountIn.toString(), 6);
     const tokenInAddr = CONTRACTS[tokenIn];
     const i = COIN_INDEX[tokenIn];
     const j = COIN_INDEX[tokenOut];
 
-    // Approve exact amount (not maxUint256)
-    await ensureApproval(walletClient, publicClient, tokenInAddr, address, STABLE_SWAP_POOL, amountRaw);
+    // Step 1 — Check allowance, approve only if needed (exact amount)
+    const allowance = await publicClient.readContract({
+      address: tokenInAddr, abi: erc20Abi, functionName: 'allowance',
+      args: [address, STABLE_SWAP_POOL],
+    });
 
-    // Execute swap — 3-param: (i, j, dx). No minDy in this contract.
+    if (allowance < amountRaw) {
+      onProgress?.('approving');
+      const approveTx = await walletClient.writeContract({
+        address: tokenInAddr, abi: erc20Abi, functionName: 'approve',
+        args: [STABLE_SWAP_POOL, amountRaw],
+      });
+      const approveReceipt = await publicClient.waitForTransactionReceipt({
+        hash: approveTx, timeout: 60_000,
+      });
+      if (approveReceipt.status !== 'success') {
+        throw new Error('Approval transaction failed on-chain.');
+      }
+    }
+
+    // Step 2 — Submit swap
+    onProgress?.('swapping');
     const txHash = await walletClient.writeContract({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
       functionName: 'swap', args: [i, j, amountRaw],
     });
-    console.log('[MiraRoute] swap tx:', txHash);
+    console.log('[MiraRoute] swap submitted:', txHash);
 
-    return { txHash };
-  }, [connector, address]);
-
-  // ── addLiquidity ──────────────────────────────────────────────────────────────
-  // amounts[0] = USDC (index 0), amounts[1] = EURC (index 1)
-  const addLiquidity = useCallback(async ({ usdcAmount, eurcAmount, onProgress }) => {
-    if (!connector || !address) throw new Error("Wallet not connected");
-
-    const provider    = await connector.getProvider();
-    const walletClient = createWalletClient({
-      account: address, chain: arcTestnet, transport: custom(provider),
+    // Step 3 — Wait for on-chain confirmation (DO NOT return early)
+    onProgress?.('confirming');
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash, timeout: 60_000,
     });
-    const publicClient = makeArcPublic();
 
-    const usdcRaw = parseUnits((usdcAmount || 0).toString(), 6);
-    const eurcRaw = parseUnits((eurcAmount || 0).toString(), 6);
-
-    if (usdcRaw > 0n) {
-      onProgress?.('approving-usdc');
-      await ensureApproval(walletClient, publicClient, CONTRACTS.USDC, address, STABLE_SWAP_POOL, usdcRaw);
+    if (receipt.status !== 'success') {
+      throw new Error(
+        'Swap reverted on-chain. The pool may have insufficient liquidity or your balance is too low.'
+      );
     }
 
-    if (eurcRaw > 0n) {
-      onProgress?.('approving-eurc');
-      await ensureApproval(walletClient, publicClient, CONTRACTS.EURC, address, STABLE_SWAP_POOL, eurcRaw);
-    }
-
-    onProgress?.('depositing');
-    const txHash = await walletClient.writeContract({
-      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'addLiquidity',
-      args: [[usdcRaw, eurcRaw], 0n],
-    });
-    console.log('[MiraRoute] addLiquidity tx:', txHash);
-
-    return { txHash };
-  }, [connector, address]);
-
-  // ── removeLiquidity ───────────────────────────────────────────────────────────
-  const removeLiquidity = useCallback(async ({ lpAmount, lpTokenAddr, onProgress }) => {
-    if (!connector || !address) throw new Error("Wallet not connected");
-
-    const provider    = await connector.getProvider();
-    const walletClient = createWalletClient({
-      account: address, chain: arcTestnet, transport: custom(provider),
-    });
-    const publicClient = makeArcPublic();
-
-    const lpRaw = parseUnits(lpAmount.toString(), 18);
-
-    onProgress?.('approving');
-    await ensureApproval(walletClient, publicClient, lpTokenAddr, address, STABLE_SWAP_POOL, lpRaw);
-
-    onProgress?.('removing');
-    const txHash = await walletClient.writeContract({
-      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'removeLiquidity',
-      args: [lpRaw, [0n, 0n]],
-    });
-    console.log('[MiraRoute] removeLiquidity tx:', txHash);
-
-    return { txHash };
+    console.log('[MiraRoute] swap confirmed:', receipt.transactionHash);
+    return { txHash: receipt.transactionHash };
   }, [connector, address]);
 
   // ── bridge (Sepolia → Arc via CCTP v2) ───────────────────────────────────────
@@ -278,11 +205,17 @@ export function useArcKit() {
 
     // Step 1 — Approve USDC to TokenMessenger on Sepolia (exact amount)
     onProgress?.(1);
-    await ensureApproval(
-      sepoliaWallet, sepoliaPublic,
-      TOKENS.USDC_SEPOLIA.address, address,
-      CCTP.TOKEN_MESSENGER, amountRaw,
-    );
+    const sepoliaAllowance = await sepoliaPublic.readContract({
+      address: TOKENS.USDC_SEPOLIA.address, abi: erc20Abi, functionName: 'allowance',
+      args: [address, CCTP.TOKEN_MESSENGER],
+    });
+    if (sepoliaAllowance < amountRaw) {
+      const approveTx = await sepoliaWallet.writeContract({
+        address: TOKENS.USDC_SEPOLIA.address, abi: erc20Abi, functionName: 'approve',
+        args: [CCTP.TOKEN_MESSENGER, amountRaw],
+      });
+      await sepoliaPublic.waitForTransactionReceipt({ hash: approveTx, timeout: 60_000 });
+    }
 
     // Step 2 — depositForBurn on Sepolia
     onProgress?.(2);
@@ -298,7 +231,7 @@ export function useArcKit() {
     // Step 3 — Poll Circle attestation (~2–4 min)
     onProgress?.(3);
     let attestationMsg = null;
-    for (let i = 0; i < 72; i++) {
+    for (let k = 0; k < 72; k++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
         const res  = await fetch(`${ATTESTATION_API}/${CCTP.SEPOLIA_DOMAIN}?transactionHash=${burnTxHash}`);
@@ -311,7 +244,7 @@ export function useArcKit() {
     }
     if (!attestationMsg) throw new Error("Attestation timed out. Check ArcScan for mint status.");
 
-    // Step 4 — Switch back to Arc and receiveMessage (mints USDC)
+    // Step 4 — Switch back to Arc and receiveMessage
     onProgress?.(4);
     await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
     await new Promise(r => setTimeout(r, 800));
@@ -320,15 +253,19 @@ export function useArcKit() {
     const arcWallet   = createWalletClient({
       account: address, chain: arcTestnet, transport: custom(arcProvider),
     });
+    const arcPublic = createPublicClient({
+      chain: arcTestnet, transport: custom(arcProvider),
+    });
     const mintTxHash = await arcWallet.writeContract({
       address: CCTP.MESSAGE_TRANSMITTER, abi: MESSAGE_TRANSMITTER_ABI,
       functionName: 'receiveMessage',
       args: [attestationMsg.message, attestationMsg.attestation],
     });
     console.log('[MiraRoute] mint tx (Arc):', mintTxHash);
+    await arcPublic.waitForTransactionReceipt({ hash: mintTxHash, timeout: 60_000 });
 
     return { txHash: mintTxHash, burnTxHash };
   }, [connector, address, chainId, switchChainAsync]);
 
-  return { swap, bridge, quote, addLiquidity, removeLiquidity, isReady: isConnected };
+  return { swap, bridge, quote, isReady: isConnected };
 }
