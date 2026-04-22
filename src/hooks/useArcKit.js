@@ -1,21 +1,12 @@
 import { useCallback } from "react";
 import { useAccount, useChainId, useSwitchChain } from "wagmi";
-import {
-  createWalletClient,
-  createPublicClient,
-  custom,
-  http,
-  parseUnits,
-  formatUnits,
-  erc20Abi,
-} from "viem";
+import { getConnectorClient, getPublicClient } from "@wagmi/core";
+import { parseUnits, formatUnits, erc20Abi } from "viem";
 import { sepolia } from "wagmi/chains";
+import { wagmiConfig } from "../wagmi";
 import { arcTestnet, TOKENS, CONTRACTS, STABLE_SWAP_POOL, CCTP, CHAIN } from "../utils/constants";
 
-// ── StableSwapPool ABI (verified from ArcScan — Solidity 0.8.20) ─────────────
-// Address: 0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC
-// tokens[0]=USDC, tokens[1]=EURC, tokens[2]=third token
-// LP token = pool contract itself (ERC-20, 18 decimals)
+// ── StableSwapPool ABI ────────────────────────────────────────────────────────
 const STABLE_SWAP_ABI = [
   {
     name: "swap", type: "function",
@@ -73,8 +64,8 @@ const STABLE_SWAP_ABI = [
   {
     name: "calc_token_amount", type: "function",
     inputs: [
-      { name: "amounts",     type: "uint256[]" },
-      { name: "is_deposit",  type: "bool"      },
+      { name: "amounts",    type: "uint256[]" },
+      { name: "is_deposit", type: "bool"      },
     ],
     outputs: [{ type: "uint256" }],
     stateMutability: "view",
@@ -120,16 +111,14 @@ export function useArcKit() {
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
 
-  // ── quote (read-only) ─────────────────────────────────────────────────────────
+  // ── quote (read-only, no wallet needed) ──────────────────────────────────────
   const quote = useCallback(async ({ tokenIn, tokenOut, amountIn }) => {
     if (!amountIn || parseFloat(amountIn) <= 0) return null;
     const amountRaw = parseUnits(amountIn.toString(), 6);
     const i = COIN_INDEX[tokenIn];
     const j = COIN_INDEX[tokenOut];
     try {
-      const publicClient = createPublicClient({
-        chain: arcTestnet, transport: http(CHAIN.ARC_RPC),
-      });
+      const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
       const out = await publicClient.readContract({
         address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
         functionName: 'get_dy', args: [i, j, amountRaw],
@@ -141,27 +130,26 @@ export function useArcKit() {
   }, []);
 
   // ── swap ──────────────────────────────────────────────────────────────────────
-  // onProgress: 'approving' | 'swapping' | 'confirming'
-  // Returns { txHash } only after on-chain receipt confirms with status='success'
   const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, onProgress }) => {
-    if (!connector || !address) throw new Error("Wallet not connected");
+    if (!isConnected || !address) throw new Error("Wallet not connected");
 
-    const provider = await connector.getProvider();
+    // Ensure we are on Arc Testnet before writing
+    if (chainId !== CHAIN.ARC_TESTNET_ID) {
+      await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
+      await new Promise(r => setTimeout(r, 600));
+    }
 
-    const walletClient = createWalletClient({
-      account: address, chain: arcTestnet, transport: custom(provider),
+    const walletClient = await getConnectorClient(wagmiConfig, {
+      account: address, chainId: arcTestnet.id, connector,
     });
-    // Use same provider transport as wallet so polling sees the same mempool
-    const publicClient = createPublicClient({
-      chain: arcTestnet, transport: custom(provider),
-    });
+    const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
 
     const amountRaw   = parseUnits(amountIn.toString(), 6);
     const tokenInAddr = CONTRACTS[tokenIn];
     const i = COIN_INDEX[tokenIn];
     const j = COIN_INDEX[tokenOut];
 
-    // Step 1 — Check allowance, approve only if needed (exact amount)
+    // Step 1 — approve if needed
     const allowance = await publicClient.readContract({
       address: tokenInAddr, abi: erc20Abi, functionName: 'allowance',
       args: [address, STABLE_SWAP_POOL],
@@ -172,62 +160,158 @@ export function useArcKit() {
       const approveTx = await walletClient.writeContract({
         address: tokenInAddr, abi: erc20Abi, functionName: 'approve',
         args: [STABLE_SWAP_POOL, amountRaw],
+        account: address, chain: arcTestnet,
       });
       const approveReceipt = await publicClient.waitForTransactionReceipt({
         hash: approveTx, timeout: 60_000,
       });
-      if (approveReceipt.status !== 'success') {
-        throw new Error('Approval transaction failed on-chain.');
-      }
+      if (approveReceipt.status !== 'success') throw new Error('Approval transaction failed on-chain.');
     }
 
-    // Step 2 — Submit swap
+    // Step 2 — swap
     onProgress?.('swapping');
     const txHash = await walletClient.writeContract({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
       functionName: 'swap', args: [i, j, amountRaw],
+      account: address, chain: arcTestnet,
     });
     console.log('[MiraRoute] swap submitted:', txHash);
 
-    // Step 3 — Wait for on-chain confirmation (DO NOT return early)
+    // Step 3 — wait for receipt
     onProgress?.('confirming');
     const receipt = await publicClient.waitForTransactionReceipt({
       hash: txHash, timeout: 60_000,
     });
 
     if (receipt.status !== 'success') {
-      throw new Error(
-        'Swap reverted on-chain. The pool may have insufficient liquidity or your balance is too low.'
-      );
+      throw new Error('Swap reverted on-chain. The pool may have insufficient liquidity.');
     }
 
     console.log('[MiraRoute] swap confirmed:', receipt.transactionHash);
     return { txHash: receipt.transactionHash };
-  }, [connector, address]);
+  }, [connector, isConnected, address, chainId, switchChainAsync]);
+
+  // ── addLiquidity ──────────────────────────────────────────────────────────────
+  const addLiquidity = useCallback(async ({ usdcAmt, eurcAmt, onProgress }) => {
+    if (!isConnected || !address) throw new Error("Wallet not connected");
+
+    if (chainId !== CHAIN.ARC_TESTNET_ID) {
+      await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
+      await new Promise(r => setTimeout(r, 600));
+    }
+
+    const walletClient = await getConnectorClient(wagmiConfig, {
+      account: address, chainId: arcTestnet.id, connector,
+    });
+    const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
+
+    const usdcRaw = usdcAmt > 0 ? parseUnits(usdcAmt.toString(), 6) : 0n;
+    const eurcRaw = eurcAmt > 0 ? parseUnits(eurcAmt.toString(), 6) : 0n;
+
+    if (usdcRaw === 0n && eurcRaw === 0n) throw new Error("Enter at least one amount");
+
+    // Approve USDC if needed
+    if (usdcRaw > 0n) {
+      const allowance = await publicClient.readContract({
+        address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'allowance',
+        args: [address, STABLE_SWAP_POOL],
+      });
+      if (allowance < usdcRaw) {
+        onProgress?.('approving-usdc');
+        const tx = await walletClient.writeContract({
+          address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'approve',
+          args: [STABLE_SWAP_POOL, usdcRaw],
+          account: address, chain: arcTestnet,
+        });
+        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
+        if (r.status !== 'success') throw new Error('USDC approval failed');
+      }
+    }
+
+    // Approve EURC if needed
+    if (eurcRaw > 0n) {
+      const allowance = await publicClient.readContract({
+        address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'allowance',
+        args: [address, STABLE_SWAP_POOL],
+      });
+      if (allowance < eurcRaw) {
+        onProgress?.('approving-eurc');
+        const tx = await walletClient.writeContract({
+          address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'approve',
+          args: [STABLE_SWAP_POOL, eurcRaw],
+          account: address, chain: arcTestnet,
+        });
+        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
+        if (r.status !== 'success') throw new Error('EURC approval failed');
+      }
+    }
+
+    // addLiquidity([usdc, eurc, 0]) — 3-token pool
+    onProgress?.('depositing');
+    const txHash = await walletClient.writeContract({
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
+      functionName: 'addLiquidity', args: [[usdcRaw, eurcRaw, 0n]],
+      account: address, chain: arcTestnet,
+    });
+
+    onProgress?.('confirming');
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
+    if (receipt.status !== 'success') throw new Error('Add liquidity reverted on-chain.');
+
+    console.log('[MiraRoute] addLiquidity confirmed:', receipt.transactionHash);
+    return { txHash: receipt.transactionHash };
+  }, [connector, isConnected, address, chainId, switchChainAsync]);
+
+  // ── removeLiquidity ───────────────────────────────────────────────────────────
+  const removeLiquidity = useCallback(async ({ lpAmt, onProgress }) => {
+    if (!isConnected || !address) throw new Error("Wallet not connected");
+
+    if (chainId !== CHAIN.ARC_TESTNET_ID) {
+      await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
+      await new Promise(r => setTimeout(r, 600));
+    }
+
+    const walletClient = await getConnectorClient(wagmiConfig, {
+      account: address, chainId: arcTestnet.id, connector,
+    });
+    const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
+
+    const lpRaw = parseUnits(lpAmt.toString(), 18);
+
+    onProgress?.('withdrawing');
+    const txHash = await walletClient.writeContract({
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
+      functionName: 'remove_liquidity', args: [lpRaw, [0n, 0n, 0n]],
+      account: address, chain: arcTestnet,
+    });
+
+    onProgress?.('confirming');
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
+    if (receipt.status !== 'success') throw new Error('Remove liquidity reverted on-chain.');
+
+    console.log('[MiraRoute] removeLiquidity confirmed:', receipt.transactionHash);
+    return { txHash: receipt.transactionHash };
+  }, [connector, isConnected, address, chainId, switchChainAsync]);
 
   // ── bridge (Sepolia → Arc via CCTP v2) ───────────────────────────────────────
   const bridge = useCallback(async ({ amount, onProgress }) => {
-    if (!connector || !address) throw new Error("Wallet not connected");
+    if (!isConnected || !address) throw new Error("Wallet not connected");
 
-    // Must be on Sepolia to initiate the burn
+    // Switch to Sepolia first
     if (chainId !== CHAIN.SEPOLIA_ID) {
       onProgress?.({ step: 0, label: 'Switching to Ethereum Sepolia…' });
       await switchChainAsync({ chainId: CHAIN.SEPOLIA_ID });
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    const provider = await connector.getProvider();
-    const sepoliaWallet = createWalletClient({
-      account: address, chain: sepolia, transport: custom(provider),
+    const sepoliaWallet = await getConnectorClient(wagmiConfig, {
+      account: address, chainId: sepolia.id, connector,
     });
-    // Use same provider as wallet — avoids unreliable public RPCs timing out
-    const sepoliaPublic = createPublicClient({
-      chain: sepolia, transport: custom(provider),
-    });
+    const sepoliaPublic = getPublicClient(wagmiConfig, { chainId: sepolia.id });
 
     const amountRaw = parseUnits(amount.toString(), 6);
 
-    // Step 1 — Approve USDC to TokenMessenger on Sepolia (exact amount)
+    // Step 1 — Approve USDC to TokenMessenger on Sepolia
     onProgress?.(1);
     const sepoliaAllowance = await sepoliaPublic.readContract({
       address: TOKENS.USDC_SEPOLIA.address, abi: erc20Abi, functionName: 'allowance',
@@ -237,6 +321,7 @@ export function useArcKit() {
       const approveTx = await sepoliaWallet.writeContract({
         address: TOKENS.USDC_SEPOLIA.address, abi: erc20Abi, functionName: 'approve',
         args: [CCTP.TOKEN_MESSENGER, amountRaw],
+        account: address, chain: sepolia,
       });
       await sepoliaPublic.waitForTransactionReceipt({ hash: approveTx, timeout: 60_000 });
     }
@@ -248,6 +333,7 @@ export function useArcKit() {
       address: CCTP.TOKEN_MESSENGER, abi: TOKEN_MESSENGER_ABI,
       functionName: 'depositForBurn',
       args: [amountRaw, CCTP.ARC_DOMAIN, mintRecipient, TOKENS.USDC_SEPOLIA.address, ZERO_BYTES32, 0n, 1000],
+      account: address, chain: sepolia,
     });
     console.log('[MiraRoute] burn tx (Sepolia):', burnTxHash);
     await sepoliaPublic.waitForTransactionReceipt({ hash: burnTxHash });
@@ -268,127 +354,27 @@ export function useArcKit() {
     }
     if (!attestationMsg) throw new Error("Attestation timed out. Check ArcScan for mint status.");
 
-    // Step 4 — Switch back to Arc and receiveMessage
+    // Step 4 — Switch to Arc and receiveMessage
     onProgress?.(4);
     await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
     await new Promise(r => setTimeout(r, 800));
 
-    const arcProvider = await connector.getProvider();
-    const arcWallet   = createWalletClient({
-      account: address, chain: arcTestnet, transport: custom(arcProvider),
+    const arcWallet = await getConnectorClient(wagmiConfig, {
+      account: address, chainId: arcTestnet.id, connector,
     });
-    const arcPublic = createPublicClient({
-      chain: arcTestnet, transport: custom(arcProvider),
-    });
+    const arcPublic = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
+
     const mintTxHash = await arcWallet.writeContract({
       address: CCTP.MESSAGE_TRANSMITTER, abi: MESSAGE_TRANSMITTER_ABI,
       functionName: 'receiveMessage',
       args: [attestationMsg.message, attestationMsg.attestation],
+      account: address, chain: arcTestnet,
     });
     console.log('[MiraRoute] mint tx (Arc):', mintTxHash);
     await arcPublic.waitForTransactionReceipt({ hash: mintTxHash, timeout: 60_000 });
 
     return { txHash: mintTxHash, burnTxHash };
-  }, [connector, address, chainId, switchChainAsync]);
-
-  // ── addLiquidity (deposit USDC + EURC into the pool) ─────────────────────────
-  // onProgress: 'approving-usdc' | 'approving-eurc' | 'depositing' | 'confirming'
-  const addLiquidity = useCallback(async ({ usdcAmt, eurcAmt, onProgress }) => {
-    if (!connector || !address) throw new Error("Wallet not connected");
-
-    const provider = await connector.getProvider();
-    const walletClient = createWalletClient({
-      account: address, chain: arcTestnet, transport: custom(provider),
-    });
-    const publicClient = createPublicClient({
-      chain: arcTestnet, transport: custom(provider),
-    });
-
-    const usdcRaw = usdcAmt > 0 ? parseUnits(usdcAmt.toString(), 6) : 0n;
-    const eurcRaw = eurcAmt > 0 ? parseUnits(eurcAmt.toString(), 6) : 0n;
-
-    if (usdcRaw === 0n && eurcRaw === 0n) throw new Error("Enter at least one amount");
-
-    // Approve USDC if needed
-    if (usdcRaw > 0n) {
-      const allowance = await publicClient.readContract({
-        address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'allowance',
-        args: [address, STABLE_SWAP_POOL],
-      });
-      if (allowance < usdcRaw) {
-        onProgress?.('approving-usdc');
-        const tx = await walletClient.writeContract({
-          address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'approve',
-          args: [STABLE_SWAP_POOL, usdcRaw],
-        });
-        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
-        if (r.status !== 'success') throw new Error('USDC approval failed');
-      }
-    }
-
-    // Approve EURC if needed
-    if (eurcRaw > 0n) {
-      const allowance = await publicClient.readContract({
-        address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'allowance',
-        args: [address, STABLE_SWAP_POOL],
-      });
-      if (allowance < eurcRaw) {
-        onProgress?.('approving-eurc');
-        const tx = await walletClient.writeContract({
-          address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'approve',
-          args: [STABLE_SWAP_POOL, eurcRaw],
-        });
-        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
-        if (r.status !== 'success') throw new Error('EURC approval failed');
-      }
-    }
-
-    // addLiquidity([usdc, eurc, 0]) — 3-token pool, 3rd slot is 0
-    onProgress?.('depositing');
-    const txHash = await walletClient.writeContract({
-      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'addLiquidity',
-      args: [[usdcRaw, eurcRaw, 0n]],
-    });
-
-    onProgress?.('confirming');
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
-    if (receipt.status !== 'success') throw new Error('Add liquidity reverted on-chain.');
-
-    console.log('[MiraRoute] addLiquidity confirmed:', receipt.transactionHash);
-    return { txHash: receipt.transactionHash };
-  }, [connector, address]);
-
-  // ── removeLiquidity (withdraw LP tokens from the pool) ────────────────────────
-  // onProgress: 'withdrawing' | 'confirming'
-  const removeLiquidity = useCallback(async ({ lpAmt, onProgress }) => {
-    if (!connector || !address) throw new Error("Wallet not connected");
-
-    const provider = await connector.getProvider();
-    const walletClient = createWalletClient({
-      account: address, chain: arcTestnet, transport: custom(provider),
-    });
-    const publicClient = createPublicClient({
-      chain: arcTestnet, transport: custom(provider),
-    });
-
-    // LP tokens are 18-decimal (CurveStableSwap LP standard)
-    const lpRaw = parseUnits(lpAmt.toString(), 18);
-
-    onProgress?.('withdrawing');
-    const txHash = await walletClient.writeContract({
-      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'remove_liquidity',
-      args: [lpRaw, [0n, 0n, 0n]],
-    });
-
-    onProgress?.('confirming');
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
-    if (receipt.status !== 'success') throw new Error('Remove liquidity reverted on-chain.');
-
-    console.log('[MiraRoute] removeLiquidity confirmed:', receipt.transactionHash);
-    return { txHash: receipt.transactionHash };
-  }, [connector, address]);
+  }, [connector, isConnected, address, chainId, switchChainAsync]);
 
   return { swap, bridge, quote, addLiquidity, removeLiquidity, isReady: isConnected };
 }

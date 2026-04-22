@@ -79,9 +79,11 @@ export default function EarnView({ balances }) {
   // Tabs
   const [tab, setTab] = useState('deposit'); // 'deposit' | 'withdraw'
 
-  // Deposit form
+  // Deposit form — auto-calculate paired amount from pool ratio
   const [usdcAmt, setUsdcAmt] = useState('');
   const [eurcAmt, setEurcAmt] = useState('');
+  // Track which field the user last typed in so the other stays auto-calculated
+  const [lastEdited, setLastEdited] = useState('usdc');
   const [depositStep, setDepositStep] = useState('idle');
   const [depositError, setDepositError] = useState(null);
   const [depositHash, setDepositHash] = useState(null);
@@ -125,6 +127,25 @@ export default function EarnView({ balances }) {
   const userUSDC  = balances?.USDC ?? 0;
   const userEURC  = balances?.EURC ?? 0;
 
+  // Pool ratio for auto-calculation (falls back to 1:1 if pool not loaded yet)
+  const ratio = poolUSDC > 0 && poolEURC > 0 ? poolEURC / poolUSDC : 1;
+
+  const handleUsdcChange = (val) => {
+    setLastEdited('usdc');
+    setUsdcAmt(val);
+    const n = parseFloat(val);
+    if (val === '' || isNaN(n) || n === 0) { setEurcAmt(''); return; }
+    setEurcAmt((n * ratio).toFixed(6).replace(/\.?0+$/, ''));
+  };
+
+  const handleEurcChange = (val) => {
+    setLastEdited('eurc');
+    setEurcAmt(val);
+    const n = parseFloat(val);
+    if (val === '' || isNaN(n) || n === 0) { setUsdcAmt(''); return; }
+    setUsdcAmt((n / ratio).toFixed(6).replace(/\.?0+$/, ''));
+  };
+
   const usdcNum   = parseFloat(usdcAmt) || 0;
   const eurcNum   = parseFloat(eurcAmt) || 0;
   const lpWithdrawNum = parseFloat(lpWithdrawAmt) || 0;
@@ -158,8 +179,7 @@ export default function EarnView({ balances }) {
         onProgress: setDepositStep,
       });
       setDepositHash(result.txHash);
-      setUsdcAmt('');
-      setEurcAmt('');
+      setUsdcAmt(''); setEurcAmt('');
       refetchLp();
     } catch (err) {
       const msg = String(err?.message ?? '');
@@ -242,14 +262,14 @@ export default function EarnView({ balances }) {
               {/* ── Deposit tab ─────────────────────────────────────── */}
               {tab === 'deposit' && (
                 <>
-                  <AmountInput label="USDC amount" sym="USDC" value={usdcAmt} onChange={setUsdcAmt}
+                  <AmountInput label="USDC amount" sym="USDC" value={usdcAmt} onChange={handleUsdcChange}
                                 balance={userUSDC} max/>
                   <div className="flex items-center gap-2 px-1 text-[11px] mono text-white/35">
                     <div className="flex-1 h-px bg-white/[0.05]"/>
-                    <span>+</span>
+                    <span className="px-1 text-teal-400/60">+</span>
                     <div className="flex-1 h-px bg-white/[0.05]"/>
                   </div>
-                  <AmountInput label="EURC amount" sym="EURC" value={eurcAmt} onChange={setEurcAmt}
+                  <AmountInput label="EURC amount" sym="EURC" value={eurcAmt} onChange={handleEurcChange}
                                 balance={userEURC} max/>
 
                   {/* Estimated LP preview */}
