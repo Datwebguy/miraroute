@@ -42,33 +42,22 @@ export const Icons = {
   Book:         (p) => <Icon {...p} d={<g><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></g>} />,
 };
 
-// MiraRoute "MR" logo — M + teal route arrow + R
-export const Logo = ({ size = 32 }) => {
-  const w = size;
-  const h = Math.round(size * 0.65);
-  return (
-    <svg width={w} height={h} viewBox="0 0 160 104" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="mrLogoG" x1="42" y1="56" x2="116" y2="38" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#2DD4BF"/>
-          <stop offset="1" stopColor="#A7F3D0"/>
-        </linearGradient>
-      </defs>
-      {/* M */}
-      <path d="M6 96 L6 14 Q26 14 42 56 Q58 14 78 14 L78 96"
-            stroke="currentColor" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
-      {/* Teal route arrow */}
-      <path d="M42 56 C54 82 70 80 82 68 C90 59 96 50 104 42"
-            stroke="url(#mrLogoG)" strokeWidth="8" strokeLinecap="round"/>
-      {/* Arrow head */}
-      <path d="M97 34 L106 43 L95 49"
-            stroke="url(#mrLogoG)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
-      {/* R */}
-      <path d="M120 96 L120 14 L146 14 Q158 14 158 34 Q158 54 146 54 L120 54 M138 54 L156 96"
-            stroke="currentColor" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-};
+export const Logo = ({ size = 36 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="lg" x1="21" y1="22" x2="79" y2="80" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#3AEAD6"/>
+        <stop offset="100%" stopColor="#0EA5E9"/>
+      </linearGradient>
+    </defs>
+    <rect width="100" height="100" rx="22" fill="#0D2035"/>
+    <ellipse cx="50" cy="60" rx="38" ry="26" fill="#2DD4BF" opacity="0.09"/>
+    <path d="M 21 80 L 21 22 L 50 52 L 79 22 L 79 80"
+          stroke="url(#lg)" strokeWidth="13"
+          strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="50" cy="52" r="4.5" fill="url(#lg)" opacity="0.65"/>
+  </svg>
+);
 
 // Token logos — circle-based with symbol character
 export const TokenLogo = ({ sym, size = 28 }) => {

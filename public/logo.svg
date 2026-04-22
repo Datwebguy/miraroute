@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!--
+    MiraRoute Logo — Icon only
+    Use this file for app icons, favicons, profile pictures, etc.
+    Colors: teal #3AEAD6 → #0EA5E9 on dark navy #0D2035
+  -->
   <defs>
     <linearGradient id="g" x1="21" y1="22" x2="79" y2="80" gradientUnits="userSpaceOnUse">
       <stop offset="0%"   stop-color="#3AEAD6"/>
@@ -14,18 +19,18 @@
     </filter>
   </defs>
 
-  <!-- Background rounded square -->
+  <!-- Background -->
   <rect width="100" height="100" rx="22" fill="url(#bg)"/>
 
-  <!-- Ambient glow behind M -->
+  <!-- Ambient glow -->
   <ellipse cx="50" cy="60" rx="38" ry="26" fill="#2DD4BF" opacity="0.09"/>
 
-  <!-- M — three-part geometric mark -->
+  <!-- M mark (reads as 3-column structure) -->
   <path d="M 21 80 L 21 22 L 50 52 L 79 22 L 79 80"
         stroke="url(#g)" stroke-width="13"
         stroke-linecap="round" stroke-linejoin="round"
         fill="none" filter="url(#glow)"/>
 
-  <!-- Route node at valley -->
-  <circle cx="50" cy="52" r="4.5" fill="url(#g)" opacity="0.6"/>
+  <!-- Route junction node -->
+  <circle cx="50" cy="52" r="4.5" fill="url(#g)" opacity="0.65"/>
 </svg>

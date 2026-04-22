@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <!--
+    MiraRoute Social / OG Thumbnail  1200 × 630 px
+    Use as: Open Graph image, Twitter card, hackathon submission banner
+  -->
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#071424"/>
+      <stop offset="60%"  stop-color="#0A1C30"/>
+      <stop offset="100%" stop-color="#0D2035"/>
+    </linearGradient>
+
+    <!-- M logo gradient -->
+    <linearGradient id="mGrad" x1="0" y1="0" x2="260" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#3AEAD6"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+
+    <!-- Text accent gradient -->
+    <linearGradient id="txtGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#3AEAD6"/>
+      <stop offset="100%" stop-color="#A7F3D0"/>
+    </linearGradient>
+
+    <!-- Radial glows -->
+    <radialGradient id="glow1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#2DD4BF" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#0EA5E9" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0EA5E9" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="logoGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Background ── -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+
+  <!-- Decorative grid lines (subtle) -->
+  <g stroke="#2DD4BF" stroke-width="0.4" opacity="0.06">
+    <line x1="0"    y1="105" x2="1200" y2="105"/>
+    <line x1="0"    y1="210" x2="1200" y2="210"/>
+    <line x1="0"    y1="315" x2="1200" y2="315"/>
+    <line x1="0"    y1="420" x2="1200" y2="420"/>
+    <line x1="0"    y1="525" x2="1200" y2="525"/>
+    <line x1="200"  y1="0"   x2="200"  y2="630"/>
+    <line x1="400"  y1="0"   x2="400"  y2="630"/>
+    <line x1="600"  y1="0"   x2="600"  y2="630"/>
+    <line x1="800"  y1="0"   x2="800"  y2="630"/>
+    <line x1="1000" y1="0"   x2="1000" y2="630"/>
+  </g>
+
+  <!-- Large radial glow — left center (behind logo) -->
+  <ellipse cx="260" cy="315" rx="320" ry="280" fill="url(#glow1)"/>
+  <!-- Right accent glow -->
+  <ellipse cx="1000" cy="315" rx="260" ry="220" fill="url(#glow2)"/>
+
+  <!-- ── Logo icon (large) ── -->
+  <!-- Icon container -->
+  <rect x="80" y="155" width="320" height="320" rx="70"
+        fill="#0D2035" stroke="#2DD4BF" stroke-width="1.5" stroke-opacity="0.25"/>
+  <!-- Glow behind M -->
+  <ellipse cx="240" cy="355" rx="120" ry="80" fill="#2DD4BF" opacity="0.1"/>
+  <!-- M mark — scaled to fit 320px box, offset to x=80,y=155 -->
+  <!-- M coordinates scaled from 100-unit space: multiply by 3.2, then offset -->
+  <!-- Original: M 21 80  L 21 22  L 50 52  L 79 22  L 79 80  in 100x100 -->
+  <!-- Scaled 3x, offset (80+x, 155+y): legs at x=143 and x=317, valley y=311, tops y=221 -->
+  <path d="M 147 411 L 147 227 L 240 323 L 333 227 L 333 411"
+        stroke="url(#mGrad)" stroke-width="40"
+        stroke-linecap="round" stroke-linejoin="round"
+        fill="none" filter="url(#logoGlow)"/>
+  <!-- Route node -->
+  <circle cx="240" cy="323" r="14" fill="url(#mGrad)" opacity="0.7"
+          filter="url(#softGlow)"/>
+
+  <!-- ── Text ── -->
+  <!-- "Mira" -->
+  <text x="450" y="295"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="112" font-weight="700" letter-spacing="-4"
+        fill="white">Mira</text>
+  <!-- "Route" -->
+  <text x="450" y="406"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="112" font-weight="300" letter-spacing="-4"
+        fill="url(#txtGrad)">Route</text>
+
+  <!-- Tagline -->
+  <text x="452" y="456"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="22" font-weight="400" letter-spacing="4"
+        fill="#2DD4BF" opacity="0.65">SWAP · BRIDGE · EARN ON ARC TESTNET</text>
+
+  <!-- Pill badges bottom right -->
+  <!-- "USDC" pill -->
+  <rect x="452" y="508" width="120" height="38" rx="19"
+        fill="#2775CA" fill-opacity="0.18" stroke="#2775CA" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="512" y="532" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="16" font-weight="600" letter-spacing="1" fill="#6BA8E5">USDC</text>
+
+  <!-- "EURC" pill -->
+  <rect x="586" y="508" width="120" height="38" rx="19"
+        fill="#2DD4BF" fill-opacity="0.12" stroke="#2DD4BF" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="646" y="532" text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="16" font-weight="600" letter-spacing="1" fill="#5EEAD4">EURC</text>
+
+  <!-- "Arc Testnet" pill -->
+  <rect x="720" y="508" width="186" height="38" rx="19"
+        fill="#2DD4BF" fill-opacity="0.1" stroke="#2DD4BF" stroke-width="1" stroke-opacity="0.35"/>
+  <!-- Live dot -->
+  <circle cx="744" cy="527" r="5" fill="#2DD4BF" opacity="0.9"/>
+  <text x="920" y="532" text-anchor="end"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="15" font-weight="500" letter-spacing="0.5" fill="#5EEAD4">Arc Testnet</text>
+
+  <!-- Circle CCTP badge — bottom right corner -->
+  <text x="1150" y="598" text-anchor="end"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="13" fill="#2DD4BF" opacity="0.4" letter-spacing="1.5">Powered by Circle CCTP</text>
+
+  <!-- Thin border frame -->
+  <rect x="1" y="1" width="1198" height="628" rx="0"
+        fill="none" stroke="#2DD4BF" stroke-width="1" stroke-opacity="0.12"/>
+</svg>
