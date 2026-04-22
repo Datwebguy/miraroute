@@ -15,8 +15,7 @@ import { arcTestnet, TOKENS, CONTRACTS, STABLE_SWAP_POOL, CCTP, CHAIN } from "..
 // ── StableSwapPool ABI (verified from ArcScan — Solidity 0.8.20) ─────────────
 // Address: 0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC
 // tokens[0]=USDC, tokens[1]=EURC, tokens[2]=third token
-// addLiquidity is onlyOwner — users cannot deposit directly
-// No removeLiquidity function exists
+// LP token = pool contract itself (ERC-20, 18 decimals)
 const STABLE_SWAP_ABI = [
   {
     name: "swap", type: "function",
@@ -53,6 +52,30 @@ const STABLE_SWAP_ABI = [
   {
     name: "fee", type: "function",
     inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    name: "addLiquidity", type: "function",
+    inputs: [{ name: "amounts", type: "uint256[]" }],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "remove_liquidity", type: "function",
+    inputs: [
+      { name: "_amount",     type: "uint256"   },
+      { name: "min_amounts", type: "uint256[]" },
+    ],
+    outputs: [{ type: "uint256[]" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    name: "calc_token_amount", type: "function",
+    inputs: [
+      { name: "amounts",     type: "uint256[]" },
+      { name: "is_deposit",  type: "bool"      },
+    ],
     outputs: [{ type: "uint256" }],
     stateMutability: "view",
   },
@@ -197,8 +220,9 @@ export function useArcKit() {
     const sepoliaWallet = createWalletClient({
       account: address, chain: sepolia, transport: custom(provider),
     });
+    // Use same provider as wallet — avoids unreliable public RPCs timing out
     const sepoliaPublic = createPublicClient({
-      chain: sepolia, transport: http('https://rpc.sepolia.org'),
+      chain: sepolia, transport: custom(provider),
     });
 
     const amountRaw = parseUnits(amount.toString(), 6);
@@ -267,5 +291,104 @@ export function useArcKit() {
     return { txHash: mintTxHash, burnTxHash };
   }, [connector, address, chainId, switchChainAsync]);
 
-  return { swap, bridge, quote, isReady: isConnected };
+  // ── addLiquidity (deposit USDC + EURC into the pool) ─────────────────────────
+  // onProgress: 'approving-usdc' | 'approving-eurc' | 'depositing' | 'confirming'
+  const addLiquidity = useCallback(async ({ usdcAmt, eurcAmt, onProgress }) => {
+    if (!connector || !address) throw new Error("Wallet not connected");
+
+    const provider = await connector.getProvider();
+    const walletClient = createWalletClient({
+      account: address, chain: arcTestnet, transport: custom(provider),
+    });
+    const publicClient = createPublicClient({
+      chain: arcTestnet, transport: custom(provider),
+    });
+
+    const usdcRaw = usdcAmt > 0 ? parseUnits(usdcAmt.toString(), 6) : 0n;
+    const eurcRaw = eurcAmt > 0 ? parseUnits(eurcAmt.toString(), 6) : 0n;
+
+    if (usdcRaw === 0n && eurcRaw === 0n) throw new Error("Enter at least one amount");
+
+    // Approve USDC if needed
+    if (usdcRaw > 0n) {
+      const allowance = await publicClient.readContract({
+        address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'allowance',
+        args: [address, STABLE_SWAP_POOL],
+      });
+      if (allowance < usdcRaw) {
+        onProgress?.('approving-usdc');
+        const tx = await walletClient.writeContract({
+          address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'approve',
+          args: [STABLE_SWAP_POOL, usdcRaw],
+        });
+        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
+        if (r.status !== 'success') throw new Error('USDC approval failed');
+      }
+    }
+
+    // Approve EURC if needed
+    if (eurcRaw > 0n) {
+      const allowance = await publicClient.readContract({
+        address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'allowance',
+        args: [address, STABLE_SWAP_POOL],
+      });
+      if (allowance < eurcRaw) {
+        onProgress?.('approving-eurc');
+        const tx = await walletClient.writeContract({
+          address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'approve',
+          args: [STABLE_SWAP_POOL, eurcRaw],
+        });
+        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
+        if (r.status !== 'success') throw new Error('EURC approval failed');
+      }
+    }
+
+    // addLiquidity([usdc, eurc, 0]) — 3-token pool, 3rd slot is 0
+    onProgress?.('depositing');
+    const txHash = await walletClient.writeContract({
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
+      functionName: 'addLiquidity',
+      args: [[usdcRaw, eurcRaw, 0n]],
+    });
+
+    onProgress?.('confirming');
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
+    if (receipt.status !== 'success') throw new Error('Add liquidity reverted on-chain.');
+
+    console.log('[MiraRoute] addLiquidity confirmed:', receipt.transactionHash);
+    return { txHash: receipt.transactionHash };
+  }, [connector, address]);
+
+  // ── removeLiquidity (withdraw LP tokens from the pool) ────────────────────────
+  // onProgress: 'withdrawing' | 'confirming'
+  const removeLiquidity = useCallback(async ({ lpAmt, onProgress }) => {
+    if (!connector || !address) throw new Error("Wallet not connected");
+
+    const provider = await connector.getProvider();
+    const walletClient = createWalletClient({
+      account: address, chain: arcTestnet, transport: custom(provider),
+    });
+    const publicClient = createPublicClient({
+      chain: arcTestnet, transport: custom(provider),
+    });
+
+    // LP tokens are 18-decimal (CurveStableSwap LP standard)
+    const lpRaw = parseUnits(lpAmt.toString(), 18);
+
+    onProgress?.('withdrawing');
+    const txHash = await walletClient.writeContract({
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
+      functionName: 'remove_liquidity',
+      args: [lpRaw, [0n, 0n, 0n]],
+    });
+
+    onProgress?.('confirming');
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
+    if (receipt.status !== 'success') throw new Error('Remove liquidity reverted on-chain.');
+
+    console.log('[MiraRoute] removeLiquidity confirmed:', receipt.transactionHash);
+    return { txHash: receipt.transactionHash };
+  }, [connector, address]);
+
+  return { swap, bridge, quote, addLiquidity, removeLiquidity, isReady: isConnected };
 }

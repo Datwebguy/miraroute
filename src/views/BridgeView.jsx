@@ -36,7 +36,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
     functionName: "balanceOf",
     args:     address ? [address] : undefined,
     chainId:  SEPOLIA_CHAIN_ID,
-    query:    { enabled: !!address, refetchInterval: 8000 },
+    query:    { enabled: !!address, refetchInterval: 12000, retry: 3, retryDelay: 1500 },
   });
 
   const sepoliaBalance = rawBalance != null ? parseFloat(formatUnits(rawBalance, 6)) : null;

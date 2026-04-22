@@ -140,10 +140,10 @@ export default function Navbar({ tab, onTab, onHome, theme, onThemeToggle }) {
                       className="hidden sm:flex grad-btn px-4 py-2 rounded-full text-[13px] font-semibold items-center gap-2">
                 <Icons.Wallet size={14}/> Connect Wallet
               </button>
-              {/* Mobile: icon-only */}
+              {/* Mobile: compact text button */}
               <button onClick={openConnectModal}
-                      className="sm:hidden flex items-center justify-center w-9 h-9 rounded-full grad-btn">
-                <Icons.Wallet size={15}/>
+                      className="sm:hidden flex items-center gap-1.5 px-3 py-2 rounded-full grad-btn text-[12px] font-semibold touch-manipulation" style={{ minHeight: 40 }}>
+                <Icons.Wallet size={13}/> Connect
               </button>
             </>
           )}
