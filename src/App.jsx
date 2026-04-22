@@ -120,13 +120,15 @@ export default function App() {
       <Navbar tab={tab} onTab={setTab} onHome={() => setView('landing')} theme={theme} onThemeToggle={onThemeToggle}/>
 
       {tab === 'Swap' && (
-        <main className="flex-1 w-full flex flex-col items-center px-4 pt-8 pb-24">
-          <div className="text-center mb-8 max-w-2xl anim-fadein">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] card-stroke mb-5">
+        <main className="flex-1 w-full flex flex-col items-center px-4 pt-6 md:pt-8 pb-[88px] md:pb-24">
+          <div className="text-center mb-6 md:mb-8 max-w-2xl anim-fadein">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] card-stroke mb-4 md:mb-5">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 pulse-ring"/>
-              <span className="text-[11.5px] mono uppercase tracking-[0.18em] text-white/60">Live on Arc Testnet. USDC native gas.</span>
+              <span className="text-[11px] sm:text-[11.5px] mono uppercase tracking-[0.15em] sm:tracking-[0.18em] text-white/60">
+                Live on Arc Testnet. USDC native gas.
+              </span>
             </div>
-            <h1 className="text-[40px] sm:text-[50px] font-light tracking-[-0.02em] leading-[1.05] hero-glow">
+            <h1 className="text-[32px] sm:text-[42px] md:text-[50px] font-light tracking-[-0.02em] leading-[1.05] hero-glow">
               Swap stablecoins <span className="grad-text font-medium">on Arc</span>
               <br className="hidden sm:block"/>
               <span className="sm:hidden"> </span>powered by Circle.
@@ -157,7 +159,7 @@ export default function App() {
               ].map(c => (
                 <button key={c.l}
                         onClick={() => { setFromSym(c.f); setToSym(c.t); setAmount(c.a); }}
-                        className="px-3 py-1.5 rounded-full bg-white/[0.03] hover:bg-white/[0.06] card-stroke text-[11.5px] mono text-white/65">
+                        className="px-3 py-2 rounded-full bg-white/[0.03] hover:bg-white/[0.06] card-stroke text-[11.5px] mono text-white/65">
                   {c.l}
                 </button>
               ))}
@@ -167,25 +169,25 @@ export default function App() {
       )}
 
       {tab === 'Earn' && (
-        <main className="flex-1 w-full flex flex-col px-4 pt-10 pb-24">
+        <main className="flex-1 w-full flex flex-col px-3 sm:px-4 pt-6 md:pt-10 pb-[88px] md:pb-24">
           <EarnView onDeposit={handleEarnDeposit} balances={mergedBalances}/>
         </main>
       )}
 
       {tab === 'Bridge' && (
-        <main className="flex-1 w-full flex flex-col px-4 pt-10 pb-24">
+        <main className="flex-1 w-full flex flex-col px-3 sm:px-4 pt-6 md:pt-10 pb-[88px] md:pb-24">
           <BridgeView onToast={showToast} balances={mergedBalances} onBridge={handleBridge} arcKit={arcKit}/>
         </main>
       )}
 
       {tab === 'Portfolio' && (
-        <main className="flex-1 w-full flex flex-col px-4 pt-10 pb-24">
+        <main className="flex-1 w-full flex flex-col px-3 sm:px-4 pt-6 md:pt-10 pb-[88px] md:pb-24">
           <PortfolioView address={address} balances={mergedBalances} onGoSwap={() => setTab('Swap')}/>
         </main>
       )}
 
       {tab === 'Docs' && (
-        <main className="flex-1 w-full flex flex-col px-4 pt-10 pb-24">
+        <main className="flex-1 w-full flex flex-col px-3 sm:px-4 pt-6 md:pt-10 pb-[88px] md:pb-24">
           <DocsView onLaunchSwap={() => setTab('Swap')}/>
         </main>
       )}

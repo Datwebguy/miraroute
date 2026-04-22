@@ -35,37 +35,37 @@ function LiveBadge({ live }) {
 
 function AmountRow({ label, tokenSym, amount, onAmount, onOpenSelect, balance, readOnly, usd, max }) {
   return (
-    <div className="rounded-2xl bg-white/[0.025] input-stroke p-4 input-glass">
+    <div className="rounded-2xl bg-white/[0.025] input-stroke p-3.5 sm:p-4 input-glass">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] mono uppercase tracking-[0.15em] text-white/40">{label}</span>
         {balance != null && (
-          <div className="flex items-center gap-2 text-[12px] text-white/55">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-[11.5px] sm:text-[12px] text-white/55">
             <span>Bal <span className="mono text-white/75">{fmt(balance)}</span></span>
             {max && (
               <>
                 <button onClick={() => onAmount((balance * 0.5).toString())}
-                        className="text-[10.5px] mono px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-teal-400">50%</button>
+                        className="text-[10.5px] mono px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-teal-400 touch-manipulation">50%</button>
                 <button onClick={() => onAmount(balance.toString())}
-                        className="text-[10.5px] mono px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-teal-400">MAX</button>
+                        className="text-[10.5px] mono px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-teal-400 touch-manipulation">MAX</button>
               </>
             )}
           </div>
         )}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <input
           value={amount} readOnly={readOnly}
           onChange={e => onAmount && onAmount(e.target.value.replace(/[^0-9.]/g, ''))}
           placeholder="0" inputMode="decimal"
-          className="flex-1 min-w-0 bg-transparent text-[32px] font-light outline-none placeholder-white/20 tracking-tight"/>
+          className="flex-1 min-w-0 bg-transparent text-[28px] sm:text-[32px] font-light outline-none placeholder-white/20 tracking-tight"/>
         <button onClick={onOpenSelect}
-                className="flex items-center gap-2 pl-1.5 pr-2.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.10] card-stroke shrink-0 transition">
-          <TokenLogo sym={tokenSym} size={26}/>
-          <span className="font-semibold text-[14px]">{tokenSym}</span>
-          <Icons.ChevronDown size={14} className="text-white/60"/>
+                className="flex items-center gap-1.5 sm:gap-2 pl-1.5 pr-2 sm:pr-2.5 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.10] card-stroke shrink-0 transition touch-manipulation">
+          <TokenLogo sym={tokenSym} size={24}/>
+          <span className="font-semibold text-[13.5px] sm:text-[14px]">{tokenSym}</span>
+          <Icons.ChevronDown size={13} className="text-white/60"/>
         </button>
       </div>
-      <div className="mt-1"><span className="text-[12px] mono text-white/40">{usd}</span></div>
+      <div className="mt-1"><span className="text-[11.5px] sm:text-[12px] mono text-white/40">{usd}</span></div>
     </div>
   );
 }
@@ -359,7 +359,7 @@ export default function SwapCard({
         <div className="pt-1">
           {isBusy ? (
             <button disabled
-                    className="w-full py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F]">
+                    className="w-full py-4 sm:py-4 rounded-2xl font-semibold text-[14px] relative overflow-hidden shimmer text-[#07261F] touch-manipulation" style={{ minHeight: 56 }}>
               <span className="relative z-10 flex items-center justify-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-[#07261F]/70 border-t-transparent rounded-full spin-slow"/>
                 {btnLabel}
@@ -369,7 +369,8 @@ export default function SwapCard({
             <button
               disabled={btnDisabled}
               onClick={handleAction}
-              className={`w-full py-4 rounded-2xl font-semibold text-[14px] tracking-tight transition ${
+              style={{ minHeight: 56 }}
+              className={`w-full py-4 rounded-2xl font-semibold text-[14px] tracking-tight transition touch-manipulation ${
                 btnDisabled ? 'bg-white/[0.04] text-white/30 cursor-not-allowed' : 'grad-btn'
               }`}>
               {btnLabel}

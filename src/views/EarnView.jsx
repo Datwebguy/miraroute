@@ -51,35 +51,111 @@ export default function EarnView({ balances }) {
   const userEURC = balances?.EURC ?? 0;
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 anim-fadein">
+    <div className="w-full max-w-5xl mx-auto anim-fadein">
 
       {/* Header */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div className="mb-5 md:mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-3 md:gap-4">
         <div>
           <div className="text-[11px] mono uppercase tracking-[0.18em] text-teal-400 mb-1.5">Arc · Earn</div>
-          <h1 className="text-[36px] font-light tracking-[-0.02em] leading-tight">
+          <h1 className="text-[28px] sm:text-[32px] md:text-[36px] font-light tracking-[-0.02em] leading-tight">
             Put your USDC to <span className="grad-text font-medium">work</span>
           </h1>
-          <p className="text-white/55 text-[13.5px] mt-2 max-w-lg">
+          <p className="text-white/55 text-[13px] mt-2 max-w-lg">
             Real yield on Arc Testnet via the USDC/EURC StableSwapPool.
           </p>
         </div>
-        <div className="flex gap-4 shrink-0">
-          <div className="rounded-xl card-stroke bg-white/[0.02] px-4 py-3">
-            <div className="text-[10.5px] mono uppercase tracking-[0.15em] text-white/40">Pool TVL</div>
-            <div className="text-[20px] font-medium mono mt-0.5">
-              {tvlUSD > 0 ? tvlFmt(tvlUSD) : <span className="text-white/30 text-[14px]">Loading…</span>}
+        <div className="flex gap-3 md:gap-4 shrink-0">
+          <div className="flex-1 md:flex-none rounded-xl card-stroke bg-white/[0.02] px-4 py-3">
+            <div className="text-[10px] md:text-[10.5px] mono uppercase tracking-[0.15em] text-white/40">Pool TVL</div>
+            <div className="text-[18px] md:text-[20px] font-medium mono mt-0.5">
+              {tvlUSD > 0 ? tvlFmt(tvlUSD) : <span className="text-white/30 text-[13px]">Loading…</span>}
             </div>
           </div>
-          <div className="rounded-xl card-stroke bg-white/[0.02] px-4 py-3">
-            <div className="text-[10.5px] mono uppercase tracking-[0.15em] text-white/40">APY</div>
-            <div className="text-[20px] font-medium grad-text mt-0.5">{APY.toFixed(1)}%</div>
+          <div className="flex-1 md:flex-none rounded-xl card-stroke bg-white/[0.02] px-4 py-3">
+            <div className="text-[10px] md:text-[10.5px] mono uppercase tracking-[0.15em] text-white/40">APY</div>
+            <div className="text-[18px] md:text-[20px] font-medium grad-text mt-0.5">{APY.toFixed(1)}%</div>
           </div>
         </div>
       </div>
 
-      {/* Pool table */}
-      <div className="rounded-3xl bg-[#0F1E2E]/70 backdrop-blur card-stroke shadow-card overflow-hidden">
+      {/* ── Mobile pool cards (< md) ─────────────────────────────────── */}
+      <div className="md:hidden space-y-3 mb-4">
+        {/* Live pool card */}
+        <div className="rounded-2xl bg-[#0F1E2E]/70 backdrop-blur card-stroke p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="flex -space-x-2">
+                {['USDC','EURC'].map((s, i) => (
+                  <div key={s} style={{ zIndex: 10 - i }}><TokenLogo sym={s} size={28}/></div>
+                ))}
+              </div>
+              <div>
+                <div className="text-[14px] font-medium">USDC / EURC</div>
+                <div className="text-[10.5px] mono text-white/40">CurveStableSwap · {FEE.toFixed(2)}% fee</div>
+              </div>
+            </div>
+            <span className="text-[10px] mono uppercase tracking-wider px-2 py-1 rounded shrink-0"
+                  style={{ background: 'rgba(45,212,191,.1)', color: '#2DD4BF' }}>
+              Swap-only
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <div className="text-[9.5px] mono uppercase text-white/40 mb-1">APY</div>
+              <div className="text-[17px] font-semibold grad-text">{APY.toFixed(1)}%</div>
+            </div>
+            <div>
+              <div className="text-[9.5px] mono uppercase text-white/40 mb-1">TVL</div>
+              <div className="text-[14px] font-medium mono">{tvlUSD > 0 ? tvlFmt(tvlUSD) : '—'}</div>
+            </div>
+            <div>
+              <div className="text-[9.5px] mono uppercase text-white/40 mb-1">Risk</div>
+              <div className="text-[12.5px] mono flex items-center justify-center gap-1 text-teal-400">
+                <Icons.Shield size={12}/> Low
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-white/[0.06] text-[11px] mono text-white/35">
+            <Icons.Info size={11} className="inline mr-1.5 text-teal-400"/>
+            Deposits restricted — swap only
+          </div>
+        </div>
+
+        {/* Coming soon card */}
+        <div className="rounded-2xl bg-[#0F1E2E]/70 card-stroke p-4 opacity-45 pointer-events-none">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <TokenLogo sym="USDC" size={28}/>
+              <div>
+                <div className="text-[14px] font-medium flex items-center gap-2">
+                  USDC Staking
+                  <span className="text-[9.5px] mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.06] text-white/40">Soon</span>
+                </div>
+                <div className="text-[10.5px] mono text-white/40">Circle Yield</div>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <div className="text-[9.5px] mono uppercase text-white/40 mb-1">APY</div>
+              <div className="text-[17px] font-semibold grad-text">5.9%</div>
+            </div>
+            <div>
+              <div className="text-[9.5px] mono uppercase text-white/40 mb-1">TVL</div>
+              <div className="text-[14px] font-medium mono">$26.7M</div>
+            </div>
+            <div>
+              <div className="text-[9.5px] mono uppercase text-white/40 mb-1">Risk</div>
+              <div className="text-[12.5px] mono flex items-center justify-center gap-1 text-teal-400">
+                <Icons.Shield size={12}/> Low
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Desktop pool table (≥ md) ──────────────────────────────────── */}
+      <div className="hidden md:block rounded-3xl bg-[#0F1E2E]/70 backdrop-blur card-stroke shadow-card overflow-hidden">
         <div className="overflow-x-auto">
           <div className="min-w-[640px]">
             <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] px-5 py-3 text-[10.5px] mono uppercase tracking-[0.15em] text-white/35 border-b border-white/5">

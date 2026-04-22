@@ -237,3 +237,25 @@ html.light-theme header {
 }
 
 button { -webkit-tap-highlight-color: transparent; }
+a      { -webkit-tap-highlight-color: transparent; }
+
+/* ── Mobile safe area + touch ──────────────────────────────────── */
+.touch-manipulation { touch-action: manipulation; }
+
+/* Prevent double-tap zoom on interactive elements */
+button, a, input, select { touch-action: manipulation; }
+
+/* Bottom nav light theme */
+html.light-theme nav[style*="rgba(10,20,32"] {
+  background: rgba(238,244,251,0.96) !important;
+  border-top-color: rgba(10,22,40,0.10) !important;
+}
+html.light-theme nav[style*="rgba(10,20,32"] button {
+  color: rgba(10,22,40,0.42) !important;
+}
+html.light-theme nav[style*="rgba(10,20,32"] button[style*="rgba(45,212,191"] {
+  color: #0F766E !important;
+}
+html.light-theme nav[style*="rgba(10,20,32"] span[style*="rgba(45,212,191"] {
+  color: #0F766E !important;
+}

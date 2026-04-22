@@ -90,15 +90,15 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
   return (
     <div className="w-full max-w-[500px] mx-auto anim-fadein">
       {/* Header */}
-      <div className="text-center mb-7">
+      <div className="text-center mb-5 md:mb-7">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] card-stroke mb-3">
           <Icons.ArrowDown size={11} stroke="#2DD4BF" className="-rotate-90"/>
           <span className="text-[11px] mono uppercase tracking-[0.18em] text-white/55">MiraRoute · Bridge</span>
         </div>
-        <h1 className="text-[30px] font-light tracking-[-0.02em]">
+        <h1 className="text-[26px] sm:text-[30px] font-light tracking-[-0.02em]">
           Bridge USDC <span className="grad-text font-semibold">to Arc</span>
         </h1>
-        <p className="text-white/50 text-[13px] mt-1.5">
+        <p className="text-white/50 text-[12.5px] sm:text-[13px] mt-1.5">
           Ethereum Sepolia → Arc Testnet via Circle CCTP. Other chains coming soon.
         </p>
       </div>
