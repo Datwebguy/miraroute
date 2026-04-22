@@ -18,12 +18,13 @@ import { arcTestnet, TOKENS, CONTRACTS, STABLE_SWAP_POOL, CCTP, CHAIN } from "..
 // All index params use uint256 (not int128).
 const STABLE_SWAP_ABI = [
   {
+    // Verified 3-param signature from ArcScan tx 0x8cd92b01...
+    // selector: swap(uint256,uint256,uint256)
     name: "swap", type: "function",
     inputs: [
-      { name: "i",     type: "uint256" },
-      { name: "j",     type: "uint256" },
-      { name: "dx",    type: "uint256" },
-      { name: "minDy", type: "uint256" },
+      { name: "i",  type: "uint256" },
+      { name: "j",  type: "uint256" },
+      { name: "dx", type: "uint256" },
     ],
     outputs: [{ type: "uint256" }],
     stateMutability: "nonpayable",
@@ -180,23 +181,13 @@ export function useArcKit() {
     const i = COIN_INDEX[tokenIn];
     const j = COIN_INDEX[tokenOut];
 
-    // On-chain quote for slippage protection
-    let minOut = 0n;
-    try {
-      const expectedOut = await publicClient.readContract({
-        address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-        functionName: 'get_dy', args: [i, j, amountRaw],
-      });
-      minOut = expectedOut * BigInt(10000 - slippageBps) / 10000n;
-    } catch {}
-
     // Approve exact amount (not maxUint256)
     await ensureApproval(walletClient, publicClient, tokenInAddr, address, STABLE_SWAP_POOL, amountRaw);
 
-    // Execute swap
+    // Execute swap — 3-param: (i, j, dx). No minDy in this contract.
     const txHash = await walletClient.writeContract({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'swap', args: [i, j, amountRaw, minOut],
+      functionName: 'swap', args: [i, j, amountRaw],
     });
     console.log('[MiraRoute] swap tx:', txHash);
 
