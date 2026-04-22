@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useAccount, useReadContract } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { erc20Abi } from "viem";
+import { erc20Abi, formatUnits } from "viem";
 import { Icons, TokenLogo } from "../components/Icons";
 import { fmt, fmtUSD } from "../utils/tokens";
+import { getTxUrl } from "../utils/constants";
 
 // Sepolia USDC balance read (display only — approval handled inside useArcKit.bridge)
 const SEPOLIA_USDC     = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
@@ -22,9 +23,11 @@ const COMING_SOON = [
 export default function BridgeView({ onToast, onBridge, arcKit }) {
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const [amt, setAmt]             = useState('');
-  const [step, setStep]           = useState(0);
+  const [amt,       setAmt]       = useState('');
+  const [step,      setStep]      = useState(0);
   const [bridgeErr, setBridgeErr] = useState(null);
+  const [mintHash,  setMintHash]  = useState(null);
+  const [burnHash,  setBurnHash]  = useState(null);
 
   // Sepolia USDC balance — display only
   const { data: rawBalance, refetch: refetchBridgeBal } = useReadContract({
@@ -36,7 +39,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
     query:    { enabled: !!address, refetchInterval: 8000 },
   });
 
-  const sepoliaBalance = rawBalance != null ? Number(rawBalance) / 1e6 : null;
+  const sepoliaBalance = rawBalance != null ? parseFloat(formatUnits(rawBalance, 6)) : null;
   const amtNum         = parseFloat(amt) || 0;
   const receiveAmt     = amtNum * 0.998;
   const fee            = 1.20;
@@ -46,16 +49,22 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
   const startBridge = async () => {
     if (!canBridge) return;
     setBridgeErr(null);
+    setMintHash(null);
+    setBurnHash(null);
     setStep(1);
     try {
       const bridgeResult = await arcKit.bridge({
         amount:     amt,
-        onProgress: (s) => setStep(s),
+        onProgress: (s) => {
+          if (typeof s === 'number') setStep(s);
+        },
       });
 
       const bridgeHash = bridgeResult?.txHash || null;
-      console.log('[MiraRoute] bridge result:', bridgeResult, '→ hash:', bridgeHash);
+      console.log('[MiraRoute] bridge result:', bridgeResult, '→ mintHash:', bridgeHash, '→ burnHash:', bridgeResult?.burnTxHash);
 
+      setMintHash(bridgeHash);
+      setBurnHash(bridgeResult?.burnTxHash || null);
       setStep(4);
       try {
         const history = JSON.parse(localStorage.getItem('miraHistory') || '[]');
@@ -257,6 +266,26 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Explorer links — shown after bridge completes */}
+        {step === 4 && (burnHash || mintHash) && (
+          <div className="rounded-xl p-3.5 space-y-2 text-[12px] mono"
+               style={{ background: 'rgba(45,212,191,.06)', boxShadow: 'inset 0 0 0 1px rgba(45,212,191,.2)' }}>
+            <div className="text-[10.5px] uppercase tracking-[0.15em] text-teal-400 mb-2">Transaction Links</div>
+            {burnHash && (
+              <a href={getTxUrl(burnHash, 'sepolia')} target="_blank" rel="noreferrer"
+                 className="flex items-center gap-1.5 text-white/60 hover:text-teal-300 transition">
+                <Icons.External size={11}/> Burn tx on Etherscan
+              </a>
+            )}
+            {mintHash && (
+              <a href={getTxUrl(mintHash, 'arc')} target="_blank" rel="noreferrer"
+                 className="flex items-center gap-1.5 text-teal-400 hover:text-teal-300 transition">
+                <Icons.External size={11}/> Mint tx on ArcScan →
+              </a>
+            )}
           </div>
         )}
 
