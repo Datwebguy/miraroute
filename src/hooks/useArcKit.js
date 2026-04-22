@@ -1,14 +1,35 @@
 import { useCallback } from "react";
 import { useAccount, useChainId, useSwitchChain } from "wagmi";
+import { writeContract, readContract } from "@wagmi/core";
 import {
-  writeContract,
-  readContract,
-  waitForTransactionReceipt,
-} from "@wagmi/core";
-import { parseUnits, formatUnits, erc20Abi } from "viem";
+  createPublicClient,
+  http,
+  parseUnits,
+  formatUnits,
+  erc20Abi,
+} from "viem";
 import { sepolia } from "wagmi/chains";
 import { wagmiConfig } from "../wagmi";
 import { arcTestnet, TOKENS, CONTRACTS, STABLE_SWAP_POOL, CCTP, CHAIN } from "../utils/constants";
+
+// ── Dedicated public clients for receipt polling ───────────────────────────────
+// These bypass @wagmi/core's transport to give us explicit pollingInterval control
+// Arc Testnet: poll every 2s, timeout 3 minutes
+const arcPublicClient = createPublicClient({
+  chain: arcTestnet,
+  transport: http(CHAIN.ARC_RPC),
+  pollingInterval: 2_000,
+});
+
+// Sepolia: poll every 3s using a reliable RPC, timeout 3 minutes
+const sepoliaPublicClient = createPublicClient({
+  chain: sepolia,
+  transport: http('https://sepolia.drpc.org'),
+  pollingInterval: 3_000,
+});
+
+const waitArc     = (hash) => arcPublicClient.waitForTransactionReceipt({ hash, timeout: 180_000 });
+const waitSepolia = (hash) => sepoliaPublicClient.waitForTransactionReceipt({ hash, timeout: 180_000 });
 
 // ── StableSwapPool ABI ────────────────────────────────────────────────────────
 const STABLE_SWAP_ABI = [
@@ -105,7 +126,8 @@ async function ensureApproval({ token, owner, spender, amount, chainId, onApprov
     address: token, abi: erc20Abi, functionName: "approve",
     args: [spender, amount], chainId,
   });
-  const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, timeout: 60_000, chainId });
+  const waitFn  = chainId === arcTestnet.id ? waitArc : waitSepolia;
+  const receipt = await waitFn(hash);
   if (receipt.status !== "success") throw new Error("Token approval failed on-chain.");
 }
 
@@ -160,14 +182,10 @@ export function useArcKit() {
     console.log("[MiraRoute] swap submitted:", txHash);
 
     onProgress?.("confirming");
-    const receipt = await waitForTransactionReceipt(wagmiConfig, {
-      hash: txHash, timeout: 60_000, chainId: cid,
-    });
-
+    const receipt = await waitArc(txHash);
     if (receipt.status !== "success") {
       throw new Error("Swap reverted on-chain. Pool may have insufficient liquidity.");
     }
-
     console.log("[MiraRoute] swap confirmed:", receipt.transactionHash);
     return { txHash: receipt.transactionHash };
   }, [isConnected, address, chainId, switchChainAsync]);
@@ -210,11 +228,8 @@ export function useArcKit() {
     });
 
     onProgress?.("confirming");
-    const receipt = await waitForTransactionReceipt(wagmiConfig, {
-      hash: txHash, timeout: 60_000, chainId: cid,
-    });
+    const receipt = await waitArc(txHash);
     if (receipt.status !== "success") throw new Error("Add liquidity reverted on-chain.");
-
     console.log("[MiraRoute] addLiquidity confirmed:", receipt.transactionHash);
     return { txHash: receipt.transactionHash };
   }, [isConnected, address, chainId, switchChainAsync]);
@@ -239,11 +254,8 @@ export function useArcKit() {
     });
 
     onProgress?.("confirming");
-    const receipt = await waitForTransactionReceipt(wagmiConfig, {
-      hash: txHash, timeout: 60_000, chainId: cid,
-    });
+    const receipt = await waitArc(txHash);
     if (receipt.status !== "success") throw new Error("Remove liquidity reverted on-chain.");
-
     console.log("[MiraRoute] removeLiquidity confirmed:", receipt.transactionHash);
     return { txHash: receipt.transactionHash };
   }, [isConnected, address, chainId, switchChainAsync]);
@@ -280,7 +292,7 @@ export function useArcKit() {
       chainId: sepoliaId,
     });
     console.log("[MiraRoute] burn tx (Sepolia):", burnTxHash);
-    await waitForTransactionReceipt(wagmiConfig, { hash: burnTxHash, chainId: sepoliaId });
+    await waitSepolia(burnTxHash);
 
     // Step 3 — poll Circle attestation (~2–4 min)
     onProgress?.(3);
@@ -310,7 +322,7 @@ export function useArcKit() {
       chainId: arcTestnet.id,
     });
     console.log("[MiraRoute] mint tx (Arc):", mintTxHash);
-    await waitForTransactionReceipt(wagmiConfig, { hash: mintTxHash, timeout: 60_000, chainId: arcTestnet.id });
+    await waitArc(mintTxHash);
 
     return { txHash: mintTxHash, burnTxHash };
   }, [isConnected, address, chainId, switchChainAsync]);
