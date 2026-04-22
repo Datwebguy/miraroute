@@ -1,6 +1,10 @@
 import { useCallback } from "react";
 import { useAccount, useChainId, useSwitchChain } from "wagmi";
-import { getConnectorClient, getPublicClient } from "@wagmi/core";
+import {
+  writeContract,
+  readContract,
+  waitForTransactionReceipt,
+} from "@wagmi/core";
 import { parseUnits, formatUnits, erc20Abi } from "viem";
 import { sepolia } from "wagmi/chains";
 import { wagmiConfig } from "../wagmi";
@@ -35,12 +39,6 @@ const STABLE_SWAP_ABI = [
     stateMutability: "view",
   },
   {
-    name: "getBalances", type: "function",
-    inputs: [],
-    outputs: [{ type: "uint256[]" }],
-    stateMutability: "view",
-  },
-  {
     name: "fee", type: "function",
     inputs: [],
     outputs: [{ type: "uint256" }],
@@ -61,18 +59,8 @@ const STABLE_SWAP_ABI = [
     outputs: [{ type: "uint256[]" }],
     stateMutability: "nonpayable",
   },
-  {
-    name: "calc_token_amount", type: "function",
-    inputs: [
-      { name: "amounts",    type: "uint256[]" },
-      { name: "is_deposit", type: "bool"      },
-    ],
-    outputs: [{ type: "uint256" }],
-    stateMutability: "view",
-  },
 ];
 
-// coins[0]=USDC (i=0), coins[1]=EURC (i=1)
 const COIN_INDEX = { USDC: 0n, EURC: 1n };
 
 // ── CCTP v2 ABI ───────────────────────────────────────────────────────────────
@@ -104,24 +92,38 @@ const MESSAGE_TRANSMITTER_ABI = [{
 const ZERO_BYTES32    = `0x${"0".repeat(64)}`;
 const ATTESTATION_API = "https://iris-api-sandbox.circle.com/v2/messages";
 
+// ── Helper: approve token if allowance is insufficient ────────────────────────
+async function ensureApproval({ token, owner, spender, amount, chainId, onApproving }) {
+  const allowance = await readContract(wagmiConfig, {
+    address: token, abi: erc20Abi, functionName: "allowance",
+    args: [owner, spender], chainId,
+  });
+  if (allowance >= amount) return;
+
+  onApproving?.();
+  const hash = await writeContract(wagmiConfig, {
+    address: token, abi: erc20Abi, functionName: "approve",
+    args: [spender, amount], chainId,
+  });
+  const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, timeout: 60_000, chainId });
+  if (receipt.status !== "success") throw new Error("Token approval failed on-chain.");
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useArcKit() {
-  const { connector, isConnected, address } = useAccount();
+  const { isConnected, address } = useAccount();
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
 
-  // ── quote (read-only, no wallet needed) ──────────────────────────────────────
+  // ── quote (read-only) ─────────────────────────────────────────────────────────
   const quote = useCallback(async ({ tokenIn, tokenOut, amountIn }) => {
     if (!amountIn || parseFloat(amountIn) <= 0) return null;
-    const amountRaw = parseUnits(amountIn.toString(), 6);
-    const i = COIN_INDEX[tokenIn];
-    const j = COIN_INDEX[tokenOut];
     try {
-      const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
-      const out = await publicClient.readContract({
-        address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-        functionName: 'get_dy', args: [i, j, amountRaw],
+      const out = await readContract(wagmiConfig, {
+        address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "get_dy",
+        args: [COIN_INDEX[tokenIn], COIN_INDEX[tokenOut], parseUnits(amountIn.toString(), 6)],
+        chainId: arcTestnet.id,
       });
       return parseFloat(formatUnits(out, 6));
     } catch {
@@ -133,63 +135,42 @@ export function useArcKit() {
   const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, onProgress }) => {
     if (!isConnected || !address) throw new Error("Wallet not connected");
 
-    // Ensure we are on Arc Testnet before writing
     if (chainId !== CHAIN.ARC_TESTNET_ID) {
       await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
       await new Promise(r => setTimeout(r, 600));
     }
 
-    const walletClient = await getConnectorClient(wagmiConfig, {
-      account: address, chainId: arcTestnet.id, connector,
-    });
-    const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
+    const amountRaw = parseUnits(amountIn.toString(), 6);
+    const cid       = arcTestnet.id;
 
-    const amountRaw   = parseUnits(amountIn.toString(), 6);
-    const tokenInAddr = CONTRACTS[tokenIn];
-    const i = COIN_INDEX[tokenIn];
-    const j = COIN_INDEX[tokenOut];
-
-    // Step 1 — approve if needed
-    const allowance = await publicClient.readContract({
-      address: tokenInAddr, abi: erc20Abi, functionName: 'allowance',
-      args: [address, STABLE_SWAP_POOL],
+    // Approve if needed
+    await ensureApproval({
+      token: CONTRACTS[tokenIn], owner: address, spender: STABLE_SWAP_POOL,
+      amount: amountRaw, chainId: cid,
+      onApproving: () => onProgress?.("approving"),
     });
 
-    if (allowance < amountRaw) {
-      onProgress?.('approving');
-      const approveTx = await walletClient.writeContract({
-        address: tokenInAddr, abi: erc20Abi, functionName: 'approve',
-        args: [STABLE_SWAP_POOL, amountRaw],
-        account: address, chain: arcTestnet,
-      });
-      const approveReceipt = await publicClient.waitForTransactionReceipt({
-        hash: approveTx, timeout: 60_000,
-      });
-      if (approveReceipt.status !== 'success') throw new Error('Approval transaction failed on-chain.');
+    // Swap
+    onProgress?.("swapping");
+    const txHash = await writeContract(wagmiConfig, {
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "swap",
+      args: [COIN_INDEX[tokenIn], COIN_INDEX[tokenOut], amountRaw],
+      chainId: cid,
+    });
+    console.log("[MiraRoute] swap submitted:", txHash);
+
+    onProgress?.("confirming");
+    const receipt = await waitForTransactionReceipt(wagmiConfig, {
+      hash: txHash, timeout: 60_000, chainId: cid,
+    });
+
+    if (receipt.status !== "success") {
+      throw new Error("Swap reverted on-chain. Pool may have insufficient liquidity.");
     }
 
-    // Step 2 — swap
-    onProgress?.('swapping');
-    const txHash = await walletClient.writeContract({
-      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'swap', args: [i, j, amountRaw],
-      account: address, chain: arcTestnet,
-    });
-    console.log('[MiraRoute] swap submitted:', txHash);
-
-    // Step 3 — wait for receipt
-    onProgress?.('confirming');
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: txHash, timeout: 60_000,
-    });
-
-    if (receipt.status !== 'success') {
-      throw new Error('Swap reverted on-chain. The pool may have insufficient liquidity.');
-    }
-
-    console.log('[MiraRoute] swap confirmed:', receipt.transactionHash);
+    console.log("[MiraRoute] swap confirmed:", receipt.transactionHash);
     return { txHash: receipt.transactionHash };
-  }, [connector, isConnected, address, chainId, switchChainAsync]);
+  }, [isConnected, address, chainId, switchChainAsync]);
 
   // ── addLiquidity ──────────────────────────────────────────────────────────────
   const addLiquidity = useCallback(async ({ usdcAmt, eurcAmt, onProgress }) => {
@@ -200,67 +181,43 @@ export function useArcKit() {
       await new Promise(r => setTimeout(r, 600));
     }
 
-    const walletClient = await getConnectorClient(wagmiConfig, {
-      account: address, chainId: arcTestnet.id, connector,
-    });
-    const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
-
     const usdcRaw = usdcAmt > 0 ? parseUnits(usdcAmt.toString(), 6) : 0n;
     const eurcRaw = eurcAmt > 0 ? parseUnits(eurcAmt.toString(), 6) : 0n;
-
     if (usdcRaw === 0n && eurcRaw === 0n) throw new Error("Enter at least one amount");
 
-    // Approve USDC if needed
+    const cid = arcTestnet.id;
+
     if (usdcRaw > 0n) {
-      const allowance = await publicClient.readContract({
-        address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'allowance',
-        args: [address, STABLE_SWAP_POOL],
+      await ensureApproval({
+        token: CONTRACTS.USDC, owner: address, spender: STABLE_SWAP_POOL,
+        amount: usdcRaw, chainId: cid,
+        onApproving: () => onProgress?.("approving-usdc"),
       });
-      if (allowance < usdcRaw) {
-        onProgress?.('approving-usdc');
-        const tx = await walletClient.writeContract({
-          address: CONTRACTS.USDC, abi: erc20Abi, functionName: 'approve',
-          args: [STABLE_SWAP_POOL, usdcRaw],
-          account: address, chain: arcTestnet,
-        });
-        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
-        if (r.status !== 'success') throw new Error('USDC approval failed');
-      }
     }
-
-    // Approve EURC if needed
     if (eurcRaw > 0n) {
-      const allowance = await publicClient.readContract({
-        address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'allowance',
-        args: [address, STABLE_SWAP_POOL],
+      await ensureApproval({
+        token: CONTRACTS.EURC, owner: address, spender: STABLE_SWAP_POOL,
+        amount: eurcRaw, chainId: cid,
+        onApproving: () => onProgress?.("approving-eurc"),
       });
-      if (allowance < eurcRaw) {
-        onProgress?.('approving-eurc');
-        const tx = await walletClient.writeContract({
-          address: CONTRACTS.EURC, abi: erc20Abi, functionName: 'approve',
-          args: [STABLE_SWAP_POOL, eurcRaw],
-          account: address, chain: arcTestnet,
-        });
-        const r = await publicClient.waitForTransactionReceipt({ hash: tx, timeout: 60_000 });
-        if (r.status !== 'success') throw new Error('EURC approval failed');
-      }
     }
 
-    // addLiquidity([usdc, eurc, 0]) — 3-token pool
-    onProgress?.('depositing');
-    const txHash = await walletClient.writeContract({
-      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'addLiquidity', args: [[usdcRaw, eurcRaw, 0n]],
-      account: address, chain: arcTestnet,
+    onProgress?.("depositing");
+    const txHash = await writeContract(wagmiConfig, {
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "addLiquidity",
+      args: [[usdcRaw, eurcRaw, 0n]],
+      chainId: cid,
     });
 
-    onProgress?.('confirming');
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
-    if (receipt.status !== 'success') throw new Error('Add liquidity reverted on-chain.');
+    onProgress?.("confirming");
+    const receipt = await waitForTransactionReceipt(wagmiConfig, {
+      hash: txHash, timeout: 60_000, chainId: cid,
+    });
+    if (receipt.status !== "success") throw new Error("Add liquidity reverted on-chain.");
 
-    console.log('[MiraRoute] addLiquidity confirmed:', receipt.transactionHash);
+    console.log("[MiraRoute] addLiquidity confirmed:", receipt.transactionHash);
     return { txHash: receipt.transactionHash };
-  }, [connector, isConnected, address, chainId, switchChainAsync]);
+  }, [isConnected, address, chainId, switchChainAsync]);
 
   // ── removeLiquidity ───────────────────────────────────────────────────────────
   const removeLiquidity = useCallback(async ({ lpAmt, onProgress }) => {
@@ -271,74 +228,61 @@ export function useArcKit() {
       await new Promise(r => setTimeout(r, 600));
     }
 
-    const walletClient = await getConnectorClient(wagmiConfig, {
-      account: address, chainId: arcTestnet.id, connector,
-    });
-    const publicClient = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
-
+    const cid   = arcTestnet.id;
     const lpRaw = parseUnits(lpAmt.toString(), 18);
 
-    onProgress?.('withdrawing');
-    const txHash = await walletClient.writeContract({
-      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI,
-      functionName: 'remove_liquidity', args: [lpRaw, [0n, 0n, 0n]],
-      account: address, chain: arcTestnet,
+    onProgress?.("withdrawing");
+    const txHash = await writeContract(wagmiConfig, {
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "remove_liquidity",
+      args: [lpRaw, [0n, 0n, 0n]],
+      chainId: cid,
     });
 
-    onProgress?.('confirming');
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60_000 });
-    if (receipt.status !== 'success') throw new Error('Remove liquidity reverted on-chain.');
+    onProgress?.("confirming");
+    const receipt = await waitForTransactionReceipt(wagmiConfig, {
+      hash: txHash, timeout: 60_000, chainId: cid,
+    });
+    if (receipt.status !== "success") throw new Error("Remove liquidity reverted on-chain.");
 
-    console.log('[MiraRoute] removeLiquidity confirmed:', receipt.transactionHash);
+    console.log("[MiraRoute] removeLiquidity confirmed:", receipt.transactionHash);
     return { txHash: receipt.transactionHash };
-  }, [connector, isConnected, address, chainId, switchChainAsync]);
+  }, [isConnected, address, chainId, switchChainAsync]);
 
   // ── bridge (Sepolia → Arc via CCTP v2) ───────────────────────────────────────
   const bridge = useCallback(async ({ amount, onProgress }) => {
     if (!isConnected || !address) throw new Error("Wallet not connected");
 
-    // Switch to Sepolia first
+    // Switch to Sepolia
     if (chainId !== CHAIN.SEPOLIA_ID) {
-      onProgress?.({ step: 0, label: 'Switching to Ethereum Sepolia…' });
+      onProgress?.({ step: 0, label: "Switching to Ethereum Sepolia…" });
       await switchChainAsync({ chainId: CHAIN.SEPOLIA_ID });
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    const sepoliaWallet = await getConnectorClient(wagmiConfig, {
-      account: address, chainId: sepolia.id, connector,
-    });
-    const sepoliaPublic = getPublicClient(wagmiConfig, { chainId: sepolia.id });
+    const amountRaw  = parseUnits(amount.toString(), 6);
+    const sepoliaId  = sepolia.id;
 
-    const amountRaw = parseUnits(amount.toString(), 6);
-
-    // Step 1 — Approve USDC to TokenMessenger on Sepolia
+    // Step 1 — approve USDC to TokenMessenger on Sepolia
     onProgress?.(1);
-    const sepoliaAllowance = await sepoliaPublic.readContract({
-      address: TOKENS.USDC_SEPOLIA.address, abi: erc20Abi, functionName: 'allowance',
-      args: [address, CCTP.TOKEN_MESSENGER],
+    await ensureApproval({
+      token: TOKENS.USDC_SEPOLIA.address, owner: address,
+      spender: CCTP.TOKEN_MESSENGER, amount: amountRaw, chainId: sepoliaId,
+      onApproving: () => {},
     });
-    if (sepoliaAllowance < amountRaw) {
-      const approveTx = await sepoliaWallet.writeContract({
-        address: TOKENS.USDC_SEPOLIA.address, abi: erc20Abi, functionName: 'approve',
-        args: [CCTP.TOKEN_MESSENGER, amountRaw],
-        account: address, chain: sepolia,
-      });
-      await sepoliaPublic.waitForTransactionReceipt({ hash: approveTx, timeout: 60_000 });
-    }
 
-    // Step 2 — depositForBurn on Sepolia
+    // Step 2 — depositForBurn
     onProgress?.(2);
-    const mintRecipient = `0x${address.slice(2).padStart(64, '0')}`;
-    const burnTxHash = await sepoliaWallet.writeContract({
+    const mintRecipient = `0x${address.slice(2).padStart(64, "0")}`;
+    const burnTxHash = await writeContract(wagmiConfig, {
       address: CCTP.TOKEN_MESSENGER, abi: TOKEN_MESSENGER_ABI,
-      functionName: 'depositForBurn',
+      functionName: "depositForBurn",
       args: [amountRaw, CCTP.ARC_DOMAIN, mintRecipient, TOKENS.USDC_SEPOLIA.address, ZERO_BYTES32, 0n, 1000],
-      account: address, chain: sepolia,
+      chainId: sepoliaId,
     });
-    console.log('[MiraRoute] burn tx (Sepolia):', burnTxHash);
-    await sepoliaPublic.waitForTransactionReceipt({ hash: burnTxHash });
+    console.log("[MiraRoute] burn tx (Sepolia):", burnTxHash);
+    await waitForTransactionReceipt(wagmiConfig, { hash: burnTxHash, chainId: sepoliaId });
 
-    // Step 3 — Poll Circle attestation (~2–4 min)
+    // Step 3 — poll Circle attestation (~2–4 min)
     onProgress?.(3);
     let attestationMsg = null;
     for (let k = 0; k < 72; k++) {
@@ -346,7 +290,7 @@ export function useArcKit() {
       try {
         const res  = await fetch(`${ATTESTATION_API}/${CCTP.SEPOLIA_DOMAIN}?transactionHash=${burnTxHash}`);
         const data = await res.json();
-        if (data?.messages?.[0]?.status === 'complete') {
+        if (data?.messages?.[0]?.status === "complete") {
           attestationMsg = data.messages[0];
           break;
         }
@@ -354,27 +298,22 @@ export function useArcKit() {
     }
     if (!attestationMsg) throw new Error("Attestation timed out. Check ArcScan for mint status.");
 
-    // Step 4 — Switch to Arc and receiveMessage
+    // Step 4 — switch to Arc and receiveMessage
     onProgress?.(4);
     await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
     await new Promise(r => setTimeout(r, 800));
 
-    const arcWallet = await getConnectorClient(wagmiConfig, {
-      account: address, chainId: arcTestnet.id, connector,
-    });
-    const arcPublic = getPublicClient(wagmiConfig, { chainId: arcTestnet.id });
-
-    const mintTxHash = await arcWallet.writeContract({
+    const mintTxHash = await writeContract(wagmiConfig, {
       address: CCTP.MESSAGE_TRANSMITTER, abi: MESSAGE_TRANSMITTER_ABI,
-      functionName: 'receiveMessage',
+      functionName: "receiveMessage",
       args: [attestationMsg.message, attestationMsg.attestation],
-      account: address, chain: arcTestnet,
+      chainId: arcTestnet.id,
     });
-    console.log('[MiraRoute] mint tx (Arc):', mintTxHash);
-    await arcPublic.waitForTransactionReceipt({ hash: mintTxHash, timeout: 60_000 });
+    console.log("[MiraRoute] mint tx (Arc):", mintTxHash);
+    await waitForTransactionReceipt(wagmiConfig, { hash: mintTxHash, timeout: 60_000, chainId: arcTestnet.id });
 
     return { txHash: mintTxHash, burnTxHash };
-  }, [connector, isConnected, address, chainId, switchChainAsync]);
+  }, [isConnected, address, chainId, switchChainAsync]);
 
   return { swap, bridge, quote, addLiquidity, removeLiquidity, isReady: isConnected };
 }
