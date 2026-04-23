@@ -268,13 +268,13 @@ export default function SwapCard({
     if (needsApproval) {
       setIsExecuting(true);
       try {
-        const receipt = await arcKit.approve({
+        const hash = await arcKit.approve({
           token: tokenAddress,
           spender: STABLE_SWAP_POOL,
           amount: amountRaw,
           cid: 5042002,
         });
-        setApproveHash(receipt.transactionHash);
+        setApproveHash(hash);
       } catch (err) {
         setSwapError(err?.message || "Approval failed");
         setIsExecuting(false);
@@ -285,13 +285,14 @@ export default function SwapCard({
     setIsExecuting(true);
     setSwapError(null);
     try {
+      console.log('[MiraRoute] Truth Test: Executing swap...');
       const result = await arcKit.swap({
         tokenIn:  fromSym,
         tokenOut: toSym,
         amountIn: amount,
       });
 
-      const hash = result?.txHash ?? null;
+      const hash = typeof result === 'string' ? result : (result?.txHash ?? null);
       setTxHash(hash);
 
       saveMiraHistory({
