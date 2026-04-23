@@ -6,7 +6,8 @@ import { getToken, fmt, fmtUSD } from "../utils/tokens";
 import { FastModeBadge } from "./RoutePreview";
 import RoutePreview from "./RoutePreview";
 import { useArcKit } from "../hooks/useArcKit";
-import { STABLE_SWAP_POOL, CONTRACTS } from "../utils/constants";
+import { STABLE_SWAP_POOL, CONTRACTS, STABLE_SWAP_ABI, COIN_INDEX } from "../utils/constants";
+import { formatUnits } from "viem";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -207,19 +208,24 @@ export default function SwapCard({
   const [approveHash, setApproveHash] = useState(undefined);
   const [txHash,      setTxHash]      = useState(undefined);
 
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+  const { data: receipt, isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash,
     query: { enabled: !!txHash, staleTime: 0 },
   });
 
   // Automatically reset state when transaction is confirmed on-chain
   useEffect(() => {
-    if (isConfirmed) {
-      console.log('[MiraRoute] Swap confirmed on-chain:', txHash);
+    if (isConfirmed && receipt) {
+      console.log('[MiraRoute] Swap confirmed on-chain:', txHash, 'status:', receipt.status);
+      if (receipt.status === 'reverted') {
+        setSwapError("Transaction reverted: Insufficient liquidity or slippage error.");
+      } else {
+        onSuccess?.(txHash);
+      }
       setIsExecuting(false);
       setTxHash(undefined);
     }
-  }, [isConfirmed, txHash]);
+  }, [isConfirmed, receipt, txHash, onSuccess]);
 
   const fromT      = getToken(fromSym);
   const toT        = getToken(toSym);
@@ -227,9 +233,21 @@ export default function SwapCard({
   const amountNum  = parseFloat(amount) || 0;
   const balance    = balances[fromSym] ?? 0;
   const toBal      = balances[toSym]   ?? 0;
-  const amountOut  = amountNum * (fromT.price / toT.price) * 0.999;
+  // ── On-Chain Quote Logic ──────────────────────────────────────────────────
+  const { data: dyRaw, isLoading: quoteLoading } = useReadContract({
+    address:      STABLE_SWAP_POOL,
+    abi:          STABLE_SWAP_ABI,
+    functionName: 'get_dy',
+    args:         [COIN_INDEX[fromSym] || 0n, COIN_INDEX[toSym] || 1n, amountRaw],
+    chainId:      5042002, // Arc Testnet
+    query:        { enabled: isLivePair && amountNum > 0, refetchInterval: 10000 },
+  });
+
+  const amountOut = dyRaw ? parseFloat(formatUnits(dyRaw, 6)) : (amountNum * (fromT.price / toT.price) * 0.999);
+  const hasLiquidity = dyRaw != null || !isLivePair || amountNum === 0;
+
   const usdIn      = amountNum > 0 ? fmtUSD(amountNum * fromT.price) : '$0.00';
-  const usdOut     = amountNum > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
+  const usdOut     = amountOut > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
   const insufficient = amountNum > balance && amountNum > 0;
 
   // ── Allowance Logic ────────────────────────────────────────────────────────
@@ -266,27 +284,10 @@ export default function SwapCard({
   // arcKit.swap() internally calls the Circle API with proper auth + encoding,
   // then submits via walletClient.writeContract() → eth_sendTransaction.
   const runSwap = async () => {
-    if (needsApproval) {
-      setIsExecuting(true);
-      try {
-        const hash = await arcKit.approve({
-          token: tokenAddress,
-          spender: STABLE_SWAP_POOL,
-          amount: amountRaw,
-          cid: 5042002,
-        });
-        setApproveHash(hash);
-      } catch (err) {
-        setSwapError(err?.message || "Approval failed");
-        setIsExecuting(false);
-      }
-      return;
-    }
-
     setIsExecuting(true);
     setSwapError(null);
     try {
-      console.log('[MiraRoute] Truth Test: Executing swap...');
+      console.log('[MiraRoute] Truth Test: Initiating swap (hook handles approvals)...');
       const result = await arcKit.swap({
         tokenIn:  fromSym,
         tokenOut: toSym,
@@ -316,7 +317,8 @@ export default function SwapCard({
           ? 'Transaction rejected by wallet'
           : msg ? msg.slice(0, 120) : 'Swap failed. Try again.'
       );
-      setIsExecuting(false); // Only reset on error here; success resets in useEffect
+    } finally {
+      setIsExecuting(false);
     }
   };
 
@@ -341,6 +343,7 @@ export default function SwapCard({
     : !isLivePair && amountNum > 0 ? 'Demo only — Live swaps need USDC or EURC'
     : amountNum === 0              ? 'Enter an amount'
     : insufficient                 ? `Insufficient ${fromSym}`
+    : !hasLiquidity                ? 'Insufficient Liquidity in Pool'
     : isApproving                  ? `Approving ${fromSym}…`
     : needsApproval                ? `Approve ${fromSym}`
     : arcKit.isWritePending        ? 'Confirm in Wallet…'
@@ -349,7 +352,7 @@ export default function SwapCard({
     :                                `Swap ${fromSym} → ${toSym} on Arc`;
 
   const btnDisabled = isConnected && (
-    isBusy || amountNum === 0 || insufficient || (!isLivePair && amountNum > 0)
+    isBusy || amountNum === 0 || insufficient || (!isLivePair && amountNum > 0) || !hasLiquidity
   );
 
   return (

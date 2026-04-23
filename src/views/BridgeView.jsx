@@ -204,8 +204,40 @@ export default function BridgeView({ onBridge, onToast }) {
           </div>
         )}
 
-        <button onClick={handleBridge} disabled={step > 0 && step < 4} className="w-full py-4 rounded-2xl font-semibold text-[14.5px] grad-btn">
-          {step > 0 && step < 4 ? 'Processing...' : needsApproval ? `Approve USDC` : `Bridge to ${isToArc ? 'Arc' : 'Sepolia'}`}
+        {resumable && step === 0 && (
+          <div className="p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/20 flex flex-col gap-2">
+            <div className="flex items-start gap-3">
+              <Icons.Zap size={16} className="text-teal-400 mt-0.5 shrink-0"/>
+              <span className="text-[13px] text-teal-200/80 leading-relaxed">
+                You have a pending bridge for <strong>{resumable.amount} USDC</strong>.
+              </span>
+            </div>
+            <div className="flex gap-4 ml-9">
+              <button onClick={() => handleBridge(resumable)} 
+                      className="text-[12px] font-semibold text-teal-400 hover:text-teal-300">
+                Resume Transaction →
+              </button>
+              <button onClick={clearPending} 
+                      className="text-[12px] font-semibold text-white/30 hover:text-white/50">
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button 
+          onClick={() => handleBridge()} 
+          disabled={(step > 0 && step < 4) || (!isConnected ? false : amtNum === 0)} 
+          className={`w-full py-4 rounded-2xl font-semibold text-[14.5px] transition-all ${
+            (step > 0 && step < 4) ? 'shimmer text-[#07261F] relative overflow-hidden' : 'grad-btn'
+          }`}
+        >
+          {step === 1 ? 'Switching Network…' 
+           : step === 2 ? 'Confirming Lock…' 
+           : step === 3 ? 'Waiting for Attestation (up to 10m)…' 
+           : step === 4 ? 'Success!' 
+           : needsApproval ? `Approve USDC` 
+           : `Bridge to ${isToArc ? 'Arc' : 'Sepolia'}`}
         </button>
 
         {step > 0 && (

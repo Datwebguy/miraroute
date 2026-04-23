@@ -71,6 +71,21 @@ export const CONTRACTS = {
 // Confirmed via: https://testnet.arcscan.app/tx/0x8cd92b0155bae9479c98d3e613e39cd893787f99d4529a54d56c61ef5508e926
 // coins[0] = USDC (i=0), coins[1] = EURC (i=1)
 export const STABLE_SWAP_POOL = '0x8c54b8A819b48EaAC277B1634792acCBE9E6219F'; // DEPLOYED LIVE
+export const COIN_INDEX = { USDC: 0n, EURC: 1n };
+
+export const STABLE_SWAP_ABI = [
+  { name: "swap",      type: "function", stateMutability: "nonpayable",
+    inputs: [{ name: "i", type: "uint256" }, { name: "j", type: "uint256" }, { name: "dx", type: "uint256" }],
+    outputs: [{ type: "uint256" }] },
+  { name: "get_dy",   type: "function", stateMutability: "view",
+    inputs: [{ name: "i", type: "uint256" }, { name: "j", type: "uint256" }, { name: "dx", type: "uint256" }],
+    outputs: [{ type: "uint256" }] },
+  { name: "addLiquidity", type: "function", stateMutability: "nonpayable",
+    inputs: [{ name: "amounts", type: "uint256[]" }], outputs: [{ type: "uint256" }] },
+  { name: "remove_liquidity", type: "function", stateMutability: "nonpayable",
+    inputs: [{ name: "_amount", type: "uint256" }, { name: "min_amounts", type: "uint256[]" }],
+    outputs: [{ type: "uint256[]" }] },
+];
 
 // Backwards-compatible alias
 export const CURVE_USDC_EURC_POOL = STABLE_SWAP_POOL;
