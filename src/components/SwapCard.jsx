@@ -230,6 +230,7 @@ export default function SwapCard({
   const toT        = getToken(toSym);
   const isLivePair = fromT.live && toT.live;
   const amountNum  = parseFloat(amount) || 0;
+  const amountRaw  = parseUnits(amount || "0", 6);
   const balance    = balances[fromSym] ?? 0;
   // ── On-Chain Quote Logic ──────────────────────────────────────────────────
   const { data: dyRaw, isLoading: quoteLoading } = useReadContract({
@@ -249,7 +250,6 @@ export default function SwapCard({
   const insufficient = amountNum > balance && amountNum > 0;
 
   // ── Allowance Logic ────────────────────────────────────────────────────────
-  const amountRaw = parseUnits(amount || "0", 6);
   const tokenAddress = fromSym === 'USDC' ? CONTRACTS.USDC : CONTRACTS.EURC;
 
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
