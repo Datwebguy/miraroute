@@ -6,7 +6,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { readContract } from "@wagmi/core";
+import { readContract, getPublicClient } from "@wagmi/core";
 import { parseUnits, formatUnits, erc20Abi } from "viem";
 import { sepolia } from "wagmi/chains";
 import { wagmiConfig } from "../wagmi";
@@ -108,7 +108,21 @@ export function useArcKit() {
   const submitAndWait = useCallback((params, cid = arcTestnet.id) => {
     return new Promise(async (resolve, reject) => {
       try {
-        const hash = await writeContractAsync({ ...params, chainId: cid });
+        // Bypass wallet RPC for estimation to prevent timeouts
+        const publicClient = getPublicClient(wagmiConfig, { chainId: cid });
+        const nonce = await publicClient.getTransactionCount({ address });
+        let gas;
+        try {
+          gas = await publicClient.estimateContractGas({ ...params, account: address });
+          gas = (gas * 120n) / 100n; // 20% buffer
+        } catch (e) {
+          console.warn("Gas estimation failed on public client, falling back to wallet estimation", e);
+        }
+
+        const txParams = { ...params, chainId: cid, nonce };
+        if (gas) txParams.gas = gas;
+
+        const hash = await writeContractAsync(txParams);
         // Wire up the receipt watcher before setting the hash
         resolveRef.current = resolve;
         rejectRef.current  = reject;
@@ -119,7 +133,7 @@ export function useArcKit() {
         reject(err);
       }
     });
-  }, [writeContractAsync]);
+  }, [writeContractAsync, address]);
 
   // ── Helper: ensure allowance, approve if needed ───────────────────────────
   const ensureApproval = useCallback(async ({ token, spender, amount, cid, onApproving }) => {
@@ -211,15 +225,14 @@ export function useArcKit() {
     }
 
     onProgress?.("depositing");
-    
-    // DEMO MODE BYPASS: The deployed StableSwapPool on Arc Testnet has an `onlyOwner` modifier 
-    // on addLiquidity, and no removeLiquidity function. To ensure the frontend demo works flawlessly 
-    // for the hackathon without showing "Not owner" errors in MetaMask, we mock the final deposit tx.
-    await new Promise(r => setTimeout(r, 2000));
-    const mockHash = `0x${Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join('')}`;
-    
-    console.log("[MiraRoute] addLiquidity mocked for demo:", mockHash);
-    return { txHash: mockHash };
+    const receipt = await submitAndWait({
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "addLiquidity",
+      args: [[usdcRaw, eurcRaw, 0n]],
+    }, cid);
+
+    if (receipt.status !== "success") throw new Error("Add liquidity reverted on-chain.");
+    console.log("[MiraRoute] addLiquidity confirmed:", receipt.transactionHash);
+    return { txHash: receipt.transactionHash };
   }, [isConnected, address, chainId, switchChainAsync, ensureApproval, submitAndWait]);
 
   // ── removeLiquidity ───────────────────────────────────────────────────────
@@ -235,13 +248,14 @@ export function useArcKit() {
     const lpRaw = parseUnits(lpAmt.toString(), 18);
 
     onProgress?.("withdrawing");
-    
-    // DEMO MODE BYPASS: Mocking remove_liquidity as the contract ABI doesn't have it.
-    await new Promise(r => setTimeout(r, 2000));
-    const mockHash = `0x${Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join('')}`;
+    const receipt = await submitAndWait({
+      address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "remove_liquidity",
+      args: [lpRaw, [0n, 0n, 0n]],
+    }, cid);
 
-    console.log("[MiraRoute] removeLiquidity mocked for demo:", mockHash);
-    return { txHash: mockHash };
+    if (receipt.status !== "success") throw new Error("Remove liquidity reverted on-chain.");
+    console.log("[MiraRoute] removeLiquidity confirmed:", receipt.transactionHash);
+    return { txHash: receipt.transactionHash };
   }, [isConnected, address, chainId, switchChainAsync, submitAndWait]);
 
   // ── bridge (Sepolia → Arc via CCTP v2) ───────────────────────────────────

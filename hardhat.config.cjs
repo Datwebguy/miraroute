@@ -17,5 +17,14 @@ module.exports = {
         : [],
       chainId: 1990,
     },
+
+    // Arc Testnet
+    arcTestnet: {
+      url: "https://rpc.testnet.arc.network",
+      accounts: process.env.DEPLOYER_PRIVATE_KEY
+        ? [process.env.DEPLOYER_PRIVATE_KEY]
+        : [],
+      chainId: 5042002,
+    },
   },
 };
