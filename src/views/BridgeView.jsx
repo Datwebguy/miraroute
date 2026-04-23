@@ -136,6 +136,8 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
         );
       }
       setStep(0);
+    } finally {
+      // Logic for cleanup if needed
     }
   };
 
@@ -365,11 +367,11 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
                   className="w-full py-4 rounded-2xl font-semibold text-[14.5px] grad-btn">
             Connect Wallet
       </button>
-    ) : (isApproving || (step > 0 && step < 4)) ? (
+    ) : (isApproving || arcKit.isWritePending || arcKit.isWaiting || (step > 0 && step < 4)) ? (
       <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14.5px] relative overflow-hidden shimmer text-[#07261F]">
         <span className="relative z-10 flex items-center justify-center gap-2">
           <span className="inline-block w-4 h-4 border-2 border-[#07261F]/60 border-t-transparent rounded-full spin-slow"/>
-          {isApproving ? 'Waiting for Approval…' : step === 1 ? 'Locking on Sepolia…' : step === 2 ? 'Waiting for attestation…' : 'Minting on Arc…'}
+          {isApproving || arcKit.isWritePending ? 'Confirm in Wallet…' : arcKit.isWaiting ? 'Waiting for Confirmation…' : step === 1 ? 'Locking on Sepolia…' : step === 2 ? 'Waiting for attestation…' : 'Minting on Arc…'}
         </span>
       </button>
     ) : (

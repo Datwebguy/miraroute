@@ -68,25 +68,32 @@ export function useArcKit() {
   const chainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
 
-  // ── Single useWriteContract for all tx submissions ────────────────────────
-  const { writeContractAsync } = useWriteContract();
+  const {
+    writeContractAsync,
+    isPending: isWritePending,
+    error: writeError,
+    reset: resetWrite
+  } = useWriteContract();
+
   const arcClient = usePublicClient({ chainId: arcTestnet.id });
   const sepoliaClient = usePublicClient({ chainId: sepolia.id });
 
-  // ── Receipt watcher state ─────────────────────────────────────────────────
-  // We bridge the async flow by storing resolve/reject refs and
-  // resolving them when useWaitForTransactionReceipt fires isSuccess/isError.
   const resolveRef = useRef(null);
   const rejectRef  = useRef(null);
   const [watchHash,  setWatchHash]  = useState(undefined);
   const [watchChain, setWatchChain] = useState(arcTestnet.id);
 
-  const { isSuccess, isError, data: receipt, error: receiptError } =
-    useWaitForTransactionReceipt({
-      hash:    watchHash,
-      chainId: watchChain,
-      query:   { enabled: !!watchHash, staleTime: 0 },
-    });
+  const {
+    isLoading: isWaiting,
+    isSuccess,
+    isError,
+    data: receipt,
+    error: receiptError
+  } = useWaitForTransactionReceipt({
+    hash:    watchHash,
+    chainId: watchChain,
+    query:   { enabled: !!watchHash, staleTime: 0 },
+  });
 
   // When the receipt arrives (success or error), resolve/reject the pending promise
   useEffect(() => {
@@ -201,14 +208,13 @@ export function useArcKit() {
   }, []);
 
   // ── swap ──────────────────────────────────────────────────────────────────
-  const swap = useCallback(async ({ tokenIn, tokenOut, amountIn, onProgress }) => {
+  const swap = useCallback(async ({ tokenIn, tokenOut, amountIn }) => {
     if (!isConnected || !address) throw new Error("Wallet not connected");
 
     if (chainId !== CHAIN.ARC_TESTNET_ID) {
       console.log("[MiraRoute] Switching chain to Arc...");
       try {
         await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
-        // Wait for wagmi to sync the new chainId
         await new Promise(r => setTimeout(r, 1200));
       } catch (err) {
         console.warn("[MiraRoute] Chain switch failed or cancelled:", err);
@@ -218,15 +224,10 @@ export function useArcKit() {
     const amountRaw = parseUnits(amountIn.toString(), 6);
     const cid       = arcTestnet.id;
 
-    onProgress?.("swapping");
     const swapReceipt = await submitAndWait({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "swap",
       args: [COIN_INDEX[tokenIn], COIN_INDEX[tokenOut], amountRaw],
     }, cid);
-
-    onProgress?.("confirming");
-    if (swapReceipt.status !== "success")
-      throw new Error("Swap reverted on-chain. Pool may have insufficient liquidity.");
 
     console.log("[MiraRoute] swap confirmed:", swapReceipt.transactionHash);
     return { txHash: swapReceipt.transactionHash };
@@ -360,5 +361,9 @@ export function useArcKit() {
     addLiquidity,
     removeLiquidity,
     bridge,
+    isWritePending,
+    isWaiting,
+    writeError,
+    resetWrite,
   };
 }

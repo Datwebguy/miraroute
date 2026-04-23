@@ -204,8 +204,6 @@ export default function SwapCard({
   const [routeOpen,   setRouteOpen]  = useState(true);
   const [swapError,   setSwapError]  = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  // 'idle' | 'approving' | 'swapping' | 'confirming'
-  const [swapStep,    setSwapStep]   = useState('idle');
   const [approveHash, setApproveHash] = useState(undefined);
 
   const fromT      = getToken(fromSym);
@@ -269,14 +267,12 @@ export default function SwapCard({
     }
 
     setIsExecuting(true);
-    setSwapStep('idle');
     setSwapError(null);
     try {
       const result = await arcKit.swap({
         tokenIn:  fromSym,
         tokenOut: toSym,
         amountIn: amount,
-        onProgress: (step) => setSwapStep(step),
       });
 
       const txHash = result?.txHash ?? null;
@@ -293,7 +289,6 @@ export default function SwapCard({
         date:     Date.now(),
       });
 
-      setSwapStep('idle');
       onSuccess?.(txHash);
     } catch (err) {
       const msg = String(err?.message ?? err ?? '');
@@ -305,7 +300,6 @@ export default function SwapCard({
       );
     } finally {
       setIsExecuting(false);
-      setSwapStep('idle');
     }
   };
 
@@ -332,8 +326,8 @@ export default function SwapCard({
     : insufficient                 ? `Insufficient ${fromSym}`
     : isApproving                  ? `Waiting for Approval…`
     : needsApproval                ? `Approve ${fromSym}`
-    : swapStep === 'swapping'      ? 'Confirm Swap in Wallet…'
-    : swapStep === 'confirming'    ? 'Waiting for Confirmation…'
+    : arcKit.isWritePending        ? 'Confirm Swap in Wallet…'
+    : arcKit.isWaiting             ? 'Waiting for Confirmation…'
     : isExecuting                  ? 'Processing…'
     :                                `Swap ${fromSym} → ${toSym} on Arc`;
 
