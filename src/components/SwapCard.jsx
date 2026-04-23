@@ -218,7 +218,6 @@ export default function SwapCard({
       console.log('[MiraRoute] Swap confirmed on-chain:', txHash);
       setIsExecuting(false);
       setTxHash(undefined);
-      // Optional: Add toast success here
     }
   }, [isConfirmed, txHash]);
 
@@ -252,8 +251,10 @@ export default function SwapCard({
 
   useEffect(() => {
     if (approveSuccess) {
+      console.log('[MiraRoute] Approval confirmed on-chain');
       setApproveHash(undefined);
       refetchAllowance();
+      setIsExecuting(false); // Reset executing state so button becomes interactive for Step 2
     }
   }, [approveSuccess, refetchAllowance]);
 
@@ -340,11 +341,11 @@ export default function SwapCard({
     : !isLivePair && amountNum > 0 ? 'Demo only — Live swaps need USDC or EURC'
     : amountNum === 0              ? 'Enter an amount'
     : insufficient                 ? `Insufficient ${fromSym}`
-    : isApproving                  ? `Waiting for Approval…`
+    : isApproving                  ? `Approving ${fromSym}…`
     : needsApproval                ? `Approve ${fromSym}`
-    : arcKit.isWritePending        ? 'Confirm Swap in Wallet…'
-    : isConfirming                 ? 'Waiting for Confirmation…'
-    : isExecuting                  ? 'Processing…'
+    : arcKit.isWritePending        ? 'Confirm in Wallet…'
+    : isConfirming                 ? 'Broadcasting to Arc…'
+    : isExecuting                  ? 'Executing Swap…'
     :                                `Swap ${fromSym} → ${toSym} on Arc`;
 
   const btnDisabled = isConnected && (

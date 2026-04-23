@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Icons, TokenLogo } from "../components/Icons";
 import { TOKENS, getToken, fmt, fmtUSD } from "../utils/tokens";
+import GatewayBalances from "../components/GatewayBalances";
 
 function agoText(ts) {
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -11,12 +12,10 @@ function agoText(ts) {
 }
 
 function ActivityRow({ tx }) {
-  // Normalise type — accept both 'swap' and 'Swap' etc.
   const type = (tx.type ?? '').toLowerCase();
   const isSwap    = type === 'swap';
   const isDeposit = type === 'deposit';
   const isBridge  = type === 'bridge';
-  // Timestamp: miraHistory uses `date`, old tx log used `ts`
   const ts = tx.ts ?? tx.date ?? Date.now();
 
   const iconFor = isSwap    ? <Icons.Swap size={13} stroke="#5EEAD4"/>
@@ -92,7 +91,6 @@ function Spark({ up }) {
 }
 
 export default function PortfolioView({ address, balances, onGoSwap }) {
-  // Read miraHistory fresh on every mount (i.e., every time Portfolio tab is opened)
   const [transactions] = useState(() => {
     try { return JSON.parse(localStorage.getItem('miraHistory') || '[]'); }
     catch { return []; }
@@ -159,11 +157,32 @@ export default function PortfolioView({ address, balances, onGoSwap }) {
             { k: 'Rewards (all-time)', v: '$0.00',          sub: '—' },
           ].map((s, i) => (
             <div key={i}>
-              <div className="text-[10.5px] mono uppercase tracking-[0.15em] text-white/40">{s.k}</div>
+              <div className="text-[10.5px] mono uppercase tracking-[0.15em] text-white/45">{s.k}</div>
               <div className="text-[19px] font-medium mt-1 mono">{s.v}</div>
               <div className="text-[11px] text-white/40 mt-0.5">{s.sub}</div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Gateway Unified Balance Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+        <div className="lg:col-span-2">
+          <GatewayBalances address={address}/>
+        </div>
+        <div className="lg:col-span-1 rounded-3xl bg-white/[0.02] border border-white/5 p-6 flex flex-col justify-center">
+          <div className="w-10 h-10 rounded-xl bg-teal-400/10 flex items-center justify-center mb-4 text-teal-400">
+            <Icons.Lock size={20}/>
+          </div>
+          <div className="text-[11px] mono uppercase tracking-[0.15em] text-white/40 mb-2">Vault Status</div>
+          <div className="text-[17px] font-medium text-white/90">Unified Liquidity Active</div>
+          <p className="text-[12px] text-white/45 mt-3 leading-relaxed">
+            Your stablecoin assets are now unified via Circle Gateway. Access your consolidated balance instantly on any supported network.
+          </p>
+          <div className="mt-5 flex items-center gap-2 text-[11px] mono text-teal-400/70">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"/>
+            Circle Gateway Testnet Live
+          </div>
         </div>
       </div>
 
@@ -207,7 +226,7 @@ export default function PortfolioView({ address, balances, onGoSwap }) {
                   <div className="mt-0.5 flex justify-end"><Spark up={h.change >= 0}/></div>
                 </div>
                 <div className="w-16 flex justify-end">
-                  <button className="text-[11.5px] mono text-teal-400 hover:text-teal-300 px-2 py-1">Swap</button>
+                  <button onClick={onGoSwap} className="text-[11.5px] mono text-teal-400 hover:text-teal-300 px-2 py-1">Swap</button>
                 </div>
               </div>
             );

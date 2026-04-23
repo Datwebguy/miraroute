@@ -83,10 +83,23 @@ export const CCTP = {
   SEPOLIA_DOMAIN:      0,
 };
 
-export const BRIDGE_CONTRACT = CCTP.TOKEN_MESSENGER;
+// Circle Gateway (Unified Balance)
+export const GATEWAY = {
+  WALLET: "0x0077777d7EBA4688BDeF3E311b846F25870A19B9",
+  MINTER: "0x0022222ABE238Cc2C7Bb1f21003F0a260052475B",
+  API_URL: "https://gateway-api-testnet.circle.com",
+  SUPPORTED_CHAINS: {
+    0:  { label: "Ethereum Sepolia", symbol: "ETH", color: "#627EEA" },
+    6:  { label: "Base Sepolia",     symbol: "BASE", color: "#0052FF" },
+    1:  { label: "Avalanche Fuji",   symbol: "AVAX", color: "#E84142" },
+    26: { label: "Arc Testnet",      symbol: "ARC",  color: "#2DD4BF" },
+    3:  { label: "Arbitrum Sepolia", symbol: "ARB",  color: "#28A0F0" },
+    2:  { label: "Optimism Sepolia", symbol: "OP",   color: "#FF0420" },
+    7:  { label: "Polygon Amoy",     symbol: "POL",  color: "#8247E5" },
+  }
+};
 
-// Kept for backwards compat — approvals now go to pool directly
-export const ARC_ADAPTER = '0xBBD70b01a1CAbc96d5b7b129Ae1AAabdf50dd40b';
+export const BRIDGE_CONTRACT = CCTP.TOKEN_MESSENGER;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
