@@ -128,17 +128,20 @@ export function useArcKit() {
         const txParams = {
           ...params,
           chainId: cid,
-          gas: params.gas ?? 500000n,
+          gas: params.gas ?? 800000n,
         };
 
-        // Arc Testnet specific gas price floor to jump the queue
+        // Aggressive gas pricing to ensure inclusion on Arc
         if (cid === arcTestnet.id) {
-          txParams.maxFeePerGas = parseUnits("1000", "gwei");
-          txParams.maxPriorityFeePerGas = parseUnits("50", "gwei");
+          const gwei1000 = parseUnits("1000", "gwei");
+          txParams.maxFeePerGas = gwei1000;
+          txParams.maxPriorityFeePerGas = parseUnits("100", "gwei");
+          txParams.gasPrice = gwei1000; // Legacy fallback
         }
 
         if (nonce !== undefined) txParams.nonce = nonce;
 
+        console.log(`[MiraRoute] Submitting tx to ${cid}...`, txParams);
         const hash = await writeContractAsync(txParams);
         resolveRef.current = resolve;
         rejectRef.current  = reject;

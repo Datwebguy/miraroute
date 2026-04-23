@@ -50,7 +50,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
     functionName: "allowance",
     args:     address ? [address, CCTP.TOKEN_MESSENGER] : undefined,
     chainId:  SEPOLIA_CHAIN_ID,
-    query:    { enabled: !!address, staleTime: 0 },
+    query:    { enabled: !!address, staleTime: 0, refetchInterval: 5000 },
   });
 
   const { isLoading: isApproving, isSuccess: approveSuccess } = useWaitForTransactionReceipt({

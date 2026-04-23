@@ -228,7 +228,7 @@ export default function SwapCard({
     abi: erc20Abi,
     functionName: 'allowance',
     args: [address, STABLE_SWAP_POOL],
-    query: { enabled: !!address, staleTime: 0 },
+    query: { enabled: !!address, staleTime: 0, refetchInterval: 5000 },
   });
 
   const { isLoading: isApproving, isSuccess: approveSuccess } = useWaitForTransactionReceipt({
