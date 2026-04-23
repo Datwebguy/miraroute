@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Icons, TokenLogo } from "../components/Icons";
 import { TOKENS, getToken, fmt, fmtUSD } from "../utils/tokens";
 import GatewayBalances from "../components/GatewayBalances";
 
-function agoText(ts) {
-  const s = Math.floor((Date.now() - ts) / 1000);
+function agoText(ts, now) {
+  if (!ts) return 'just now';
+  const s = Math.floor((now - ts) / 1000);
+  if (s < 0) return 'just now';
   if (s < 60) return `${s}s ago`;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-function ActivityRow({ tx }) {
+function ActivityRow({ tx, now }) {
   const type = (tx.type ?? '').toLowerCase();
   const isSwap    = type === 'swap';
   const isDeposit = type === 'deposit';
@@ -37,7 +39,7 @@ function ActivityRow({ tx }) {
           {isBridge  && <span className="text-white/65 mono">{tx.fromChain} → {tx.toChain}</span>}
         </div>
         <div className="text-[10.5px] mono text-white/40 flex items-center gap-1.5">
-          {agoText(ts)}
+          {agoText(ts, now)}
           {tx.hash && (
             <>
               <span className="text-white/25">·</span>
@@ -95,6 +97,12 @@ export default function PortfolioView({ address, balances, onGoSwap }) {
     try { return JSON.parse(localStorage.getItem('miraHistory') || '[]'); }
     catch { return []; }
   });
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(t);
+  }, []);
+
   const shortAddr = address ? `${address.slice(0, 8)}…${address.slice(-4)}` : '—';
 
   const holdings = TOKENS
@@ -263,7 +271,7 @@ export default function PortfolioView({ address, balances, onGoSwap }) {
             </div>
           ) : (
             <div className="space-y-2 max-h-[320px] overflow-y-auto no-scrollbar pr-1">
-              {transactions.map((tx, i) => <ActivityRow key={tx.hash ?? i} tx={tx}/>)}
+              {transactions.map((tx, i) => <ActivityRow key={tx.hash || i} tx={tx} now={now}/>)}
             </div>
           )}
 
