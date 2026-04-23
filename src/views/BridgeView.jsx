@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, useReadContract, useChainId } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { erc20Abi, formatUnits } from "viem";
 import { Icons, TokenLogo } from "../components/Icons";
@@ -22,12 +22,16 @@ const COMING_SOON = [
 
 export default function BridgeView({ onToast, onBridge, arcKit }) {
   const { address, isConnected } = useAccount();
+  const chainId = useChainId();
   const { openConnectModal } = useConnectModal();
-  const [amt,       setAmt]       = useState('');
-  const [step,      setStep]      = useState(0);
-  const [bridgeErr, setBridgeErr] = useState(null);
-  const [mintHash,  setMintHash]  = useState(null);
-  const [burnHash,  setBurnHash]  = useState(null);
+  const [amt,            setAmt]            = useState('');
+  const [step,           setStep]           = useState(0);
+  const [bridgeErr,      setBridgeErr]      = useState(null);
+  const [mintHash,       setMintHash]       = useState(null);
+  const [burnHash,       setBurnHash]       = useState(null);
+  const [needManualSwitch, setNeedManualSwitch] = useState(false);
+
+  const wrongChain = isConnected && chainId !== SEPOLIA_CHAIN_ID && step === 0;
 
   // Sepolia USDC balance — display only
   const { data: rawBalance, refetch: refetchBridgeBal } = useReadContract({
@@ -44,13 +48,14 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
   const receiveAmt     = amtNum * 0.998;
   const fee            = 1.20;
   const insufficient   = sepoliaBalance != null && amtNum > 0 && amtNum > sepoliaBalance;
-  const canBridge      = isConnected && amtNum > 0 && !insufficient && step === 0;
+  const canBridge = isConnected && amtNum > 0 && !insufficient && step === 0 && !wrongChain;
 
   const startBridge = async () => {
     if (!canBridge) return;
     setBridgeErr(null);
     setMintHash(null);
     setBurnHash(null);
+    setNeedManualSwitch(false);
     setStep(1);
     try {
       const bridgeResult = await arcKit.bridge({
@@ -78,11 +83,17 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
       setTimeout(() => { setStep(0); setAmt(''); }, 4000);
     } catch (err) {
       const msg = String(err?.message ?? '');
-      setBridgeErr(
-        msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
-          ? 'Transaction rejected by wallet'
-          : msg || 'Bridge failed. Please try again.'
-      );
+      if (err?.code === 'CHAIN_SWITCH_REQUIRED') {
+        // Wallet (e.g. Rabby) blocked programmatic switching
+        setNeedManualSwitch(true);
+        setBridgeErr(null);
+      } else {
+        setBridgeErr(
+          msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('denied')
+            ? 'Transaction rejected by wallet'
+            : msg || 'Bridge failed. Please try again.'
+        );
+      }
       setStep(0);
     }
   };
@@ -226,6 +237,24 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
           </div>
         </div>
 
+        {/* Wrong-chain banner (shown when connected to non-Sepolia) */}
+        {wrongChain && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[12px] mono"
+               style={{ background: 'rgba(251,191,36,.07)', boxShadow: 'inset 0 0 0 1px rgba(251,191,36,.25)' }}>
+            <Icons.Info size={13} className="shrink-0 mt-0.5" style={{ color: '#FBB724' }}/>
+            <span style={{ color: '#FCD34D' }}>You are on the wrong network. Please switch your wallet to <strong>Ethereum Sepolia</strong> to bridge.</span>
+          </div>
+        )}
+
+        {/* Manual switch required banner (Rabby / wallets that block programmatic switching) */}
+        {needManualSwitch && (
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-[12px] mono"
+               style={{ background: 'rgba(251,191,36,.07)', boxShadow: 'inset 0 0 0 1px rgba(251,191,36,.3)' }}>
+            <Icons.Info size={13} className="shrink-0 mt-0.5" style={{ color: '#FBB724' }}/>
+            <span style={{ color: '#FCD34D' }}>Your wallet does not support automatic network switching. Please manually switch to <strong>Ethereum Sepolia</strong> in your wallet extension, then click Bridge again.</span>
+          </div>
+        )}
+
         {/* Error */}
         {bridgeErr && (
           <div className="flex items-start gap-2 text-[11.5px] mono text-rose-400 px-1">
@@ -308,7 +337,11 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
                   className={`w-full py-4 rounded-2xl font-semibold text-[14.5px] tracking-tight transition-all ${
                     !canBridge ? 'bg-white/[0.04] text-white/25 cursor-not-allowed' : 'grad-btn'
                   }`}>
-            {insufficient ? 'Insufficient USDC Balance'
+            {wrongChain
+              ? 'Switch to Sepolia in Wallet'
+              : needManualSwitch
+              ? 'Switch to Sepolia, Then Try Again'
+              : insufficient ? 'Insufficient USDC Balance'
               : !amtNum ? 'Enter an amount' : (
               <span className="flex items-center justify-center gap-2">
                 <Icons.ArrowDown size={15} stroke="currentColor" className="-rotate-90"/>

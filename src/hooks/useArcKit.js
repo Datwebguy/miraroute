@@ -252,8 +252,23 @@ export function useArcKit() {
 
     if (chainId !== CHAIN.SEPOLIA_ID) {
       onProgress?.({ step: 0, label: "Switching to Ethereum Sepolia…" });
-      await switchChainAsync({ chainId: CHAIN.SEPOLIA_ID });
-      await new Promise(r => setTimeout(r, 1000));
+      try {
+        await switchChainAsync({ chainId: CHAIN.SEPOLIA_ID });
+        await new Promise(r => setTimeout(r, 1000));
+      } catch (switchErr) {
+        const msg = String(switchErr?.message ?? '');
+        if (
+          msg.toLowerCase().includes('programmatic chain switching') ||
+          msg.toLowerCase().includes('does not support')
+        ) {
+          // Wallet like Rabby blocks programmatic switching — tell the UI
+          const err = new Error('CHAIN_SWITCH_REQUIRED');
+          err.code = 'CHAIN_SWITCH_REQUIRED';
+          err.requiredChainId = CHAIN.SEPOLIA_ID;
+          throw err;
+        }
+        throw switchErr; // Unknown error — re-throw normally
+      }
     }
 
     const amountRaw = parseUnits(amount.toString(), 6);
