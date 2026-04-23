@@ -115,39 +115,46 @@ export function useArcKit() {
   const submitAndWait = useCallback((params, cid = arcTestnet.id) => {
     return new Promise(async (resolve, reject) => {
       try {
-        // Get nonce from OUR RPC, not the wallet's internal one
+        // Get nonce from OUR RPC with a strict 3s timeout to avoid hanging
         let nonce;
         try {
           const client = cid === sepolia.id ? sepoliaClient : arcClient;
-          nonce = await client.getTransactionCount({ address, blockTag: 'pending' });
+          nonce = await Promise.race([
+            client.getTransactionCount({ address, blockTag: 'pending' }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))
+          ]);
         } catch (e) {
-          console.warn("[MiraRoute] Nonce fetch failed, falling back to wallet nonce:", e);
+          console.warn(`[MiraRoute] Nonce fetch ${e?.message === 'timeout' ? 'timed out' : 'failed'}, using wallet default:`, e);
           nonce = undefined;
         }
 
         const txParams = {
           ...params,
-          chainId: cid,
           gas: params.gas ?? 800000n,
         };
 
-        // Aggressive gas pricing to ensure inclusion on Arc
+        // Aggressive gas pricing for Arc (EIP-1559 only)
         if (cid === arcTestnet.id) {
-          const gwei1000 = parseUnits("1000", "gwei");
-          txParams.maxFeePerGas = gwei1000;
+          txParams.maxFeePerGas = parseUnits("1000", "gwei");
           txParams.maxPriorityFeePerGas = parseUnits("100", "gwei");
-          txParams.gasPrice = gwei1000; // Legacy fallback
         }
 
         if (nonce !== undefined) txParams.nonce = nonce;
 
-        console.log(`[MiraRoute] Submitting tx to ${cid}...`, txParams);
+        console.log(`[MiraRoute] Attempting wallet push: ${params.functionName}`, txParams);
+        
+        // Brief delay for wallet state to settle (especially after chain switch)
+        await new Promise(r => setTimeout(r, 1000));
+
         const hash = await writeContractAsync(txParams);
+        console.log(`[MiraRoute] Wallet accepted! Hash: ${hash}`);
+        
         resolveRef.current = resolve;
         rejectRef.current  = reject;
         setWatchChain(cid);
         setWatchHash(hash);
       } catch (err) {
+        console.error("[MiraRoute] Wallet push failed:", err);
         reject(err);
       }
     });
@@ -198,8 +205,14 @@ export function useArcKit() {
     if (!isConnected || !address) throw new Error("Wallet not connected");
 
     if (chainId !== CHAIN.ARC_TESTNET_ID) {
-      await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
-      await new Promise(r => setTimeout(r, 600));
+      console.log("[MiraRoute] Switching chain to Arc...");
+      try {
+        await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
+        // Wait for wagmi to sync the new chainId
+        await new Promise(r => setTimeout(r, 1200));
+      } catch (err) {
+        console.warn("[MiraRoute] Chain switch failed or cancelled:", err);
+      }
     }
 
     const amountRaw = parseUnits(amountIn.toString(), 6);
