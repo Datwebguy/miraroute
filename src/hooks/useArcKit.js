@@ -5,8 +5,9 @@ import {
   useSwitchChain,
   useWriteContract,
   useWaitForTransactionReceipt,
+  usePublicClient,
 } from "wagmi";
-import { readContract, getPublicClient } from "@wagmi/core";
+import { readContract } from "@wagmi/core";
 import { parseUnits, formatUnits, erc20Abi } from "viem";
 import { sepolia } from "wagmi/chains";
 import { wagmiConfig } from "../wagmi";
@@ -69,6 +70,8 @@ export function useArcKit() {
 
   // ── Single useWriteContract for all tx submissions ────────────────────────
   const { writeContractAsync } = useWriteContract();
+  const arcClient = usePublicClient({ chainId: arcTestnet.id });
+  const sepoliaClient = usePublicClient({ chainId: sepolia.id });
 
   // ── Receipt watcher state ─────────────────────────────────────────────────
   // We bridge the async flow by storing resolve/reject refs and
@@ -114,10 +117,10 @@ export function useArcKit() {
         // Get nonce from OUR RPC, not the wallet's internal one
         let nonce;
         try {
-          const publicClient = getPublicClient(wagmiConfig, { chainId: cid });
-          nonce = await publicClient.getTransactionCount({ address, blockTag: 'pending' });
-        } catch {
-          // If our public client fails, fall back to wallet-managed nonce
+          const client = cid === sepolia.id ? sepoliaClient : arcClient;
+          nonce = await client.getTransactionCount({ address, blockTag: 'pending' });
+        } catch (e) {
+          console.warn("[MiraRoute] Nonce fetch failed, falling back to wallet nonce:", e);
           nonce = undefined;
         }
 
@@ -133,7 +136,7 @@ export function useArcKit() {
         reject(err);
       }
     });
-  }, [writeContractAsync, address]);
+  }, [writeContractAsync, address, arcClient, sepoliaClient]);
 
   // ── Helper: ensure allowance, approve if needed ───────────────────────────
   const ensureApproval = useCallback(async ({ token, spender, amount, cid, onApproving }) => {
