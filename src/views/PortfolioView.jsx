@@ -16,7 +16,7 @@ function ActivityRow({ tx }) {
   const isSwap    = type === 'swap';
   const isDeposit = type === 'deposit';
   const isBridge  = type === 'bridge';
-  const ts = tx.ts ?? tx.date ?? Date.now();
+  const ts = tx.ts ?? tx.date ?? 0;
 
   const iconFor = isSwap    ? <Icons.Swap size={13} stroke="#5EEAD4"/>
                 : isDeposit ? <Icons.Plus size={13} stroke="#5EEAD4"/>

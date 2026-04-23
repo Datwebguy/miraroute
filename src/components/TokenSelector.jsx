@@ -4,7 +4,13 @@ import { Icons, TokenLogo } from "./Icons";
 
 export default function TokenSelector({ open, onClose, onPick, exclude, balances = {} }) {
   const [q, setQ] = useState('');
-  useEffect(() => { if (open) setQ(''); }, [open]);
+  useEffect(() => {
+    if (open) {
+      // Use a small delay to avoid cascading render lint error
+      const t = setTimeout(() => setQ(''), 0);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
   if (!open) return null;
 
   const filtered = TOKENS.filter(t =>

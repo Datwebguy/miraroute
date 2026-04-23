@@ -196,13 +196,12 @@ export default function SwapCard({
   balances, onOpenPicker,
   fastMode, slippage, setSlippage, autoSlip, setAutoSlip,
   gas, setGas, recipient, setRecipient, isConnected, onConnect,
-  onSuccess,   // (txHash: string) => void
+  onSuccess,
 }) {
   const { address } = useAccount();
   const arcKit = useArcKit();
 
-  const [advOpen,     setAdvOpen]    = useState(false);
-  const [routeOpen,   setRouteOpen]  = useState(true);
+  const [advOpen,     setAdvOpen]     = useState(false);
   const [swapError,   setSwapError]  = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [approveHash, setApproveHash] = useState(undefined);
@@ -232,7 +231,6 @@ export default function SwapCard({
   const isLivePair = fromT.live && toT.live;
   const amountNum  = parseFloat(amount) || 0;
   const balance    = balances[fromSym] ?? 0;
-  const toBal      = balances[toSym]   ?? 0;
   // ── On-Chain Quote Logic ──────────────────────────────────────────────────
   const { data: dyRaw, isLoading: quoteLoading } = useReadContract({
     address:      STABLE_SWAP_POOL,

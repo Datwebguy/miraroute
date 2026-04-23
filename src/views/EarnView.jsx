@@ -79,11 +79,9 @@ export default function EarnView({ balances }) {
   // Tabs
   const [tab, setTab] = useState('deposit'); // 'deposit' | 'withdraw'
 
-  // Deposit form — auto-calculate paired amount from pool ratio
+  // Deposit form
   const [usdcAmt, setUsdcAmt] = useState('');
   const [eurcAmt, setEurcAmt] = useState('');
-  // Track which field the user last typed in so the other stays auto-calculated
-  const [lastEdited, setLastEdited] = useState('usdc');
   const [depositStep, setDepositStep] = useState('idle');
   const [depositError, setDepositError] = useState(null);
   const [depositHash, setDepositHash] = useState(null);
@@ -130,7 +128,6 @@ export default function EarnView({ balances }) {
   // Pool ratio (only used for UI display, NOT forced on inputs)
   // Since this is a stableswap pool, users can supply tokens in any ratio.
   // We used to auto-fill the paired amount, but this forced 1:1 on empty pools.
-  const ratio = poolUSDC > 0 && poolEURC > 0 ? poolEURC / poolUSDC : null;
 
   const handleUsdcChange = (val) => {
     setUsdcAmt(val);
