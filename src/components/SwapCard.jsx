@@ -205,6 +205,22 @@ export default function SwapCard({
   const [swapError,   setSwapError]  = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [approveHash, setApproveHash] = useState(undefined);
+  const [txHash,      setTxHash]      = useState(undefined);
+
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash: txHash,
+    query: { enabled: !!txHash, staleTime: 0 },
+  });
+
+  // Automatically reset state when transaction is confirmed on-chain
+  useEffect(() => {
+    if (isConfirmed) {
+      console.log('[MiraRoute] Swap confirmed on-chain:', txHash);
+      setIsExecuting(false);
+      setTxHash(undefined);
+      // Optional: Add toast success here
+    }
+  }, [isConfirmed, txHash]);
 
   const fromT      = getToken(fromSym);
   const toT        = getToken(toSym);
@@ -275,8 +291,8 @@ export default function SwapCard({
         amountIn: amount,
       });
 
-      const txHash = result?.txHash ?? null;
-      console.log('[MiraRoute] swap confirmed on-chain:', txHash);
+      const hash = result?.txHash ?? null;
+      setTxHash(hash);
 
       saveMiraHistory({
         type:     'Swap',
@@ -285,11 +301,11 @@ export default function SwapCard({
         amountOut,
         fromSym,
         toSym,
-        hash:     txHash,
+        hash:     hash,
         date:     Date.now(),
       });
 
-      onSuccess?.(txHash);
+      onSuccess?.(hash);
     } catch (err) {
       const msg = String(err?.message ?? err ?? '');
       console.error('[MiraRoute swap error]', err);
@@ -298,8 +314,7 @@ export default function SwapCard({
           ? 'Transaction rejected by wallet'
           : msg ? msg.slice(0, 120) : 'Swap failed. Try again.'
       );
-    } finally {
-      setIsExecuting(false);
+      setIsExecuting(false); // Only reset on error here; success resets in useEffect
     }
   };
 
@@ -327,7 +342,7 @@ export default function SwapCard({
     : isApproving                  ? `Waiting for Approval…`
     : needsApproval                ? `Approve ${fromSym}`
     : arcKit.isWritePending        ? 'Confirm Swap in Wallet…'
-    : arcKit.isWaiting             ? 'Waiting for Confirmation…'
+    : isConfirming                 ? 'Waiting for Confirmation…'
     : isExecuting                  ? 'Processing…'
     :                                `Swap ${fromSym} → ${toSym} on Arc`;
 

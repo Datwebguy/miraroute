@@ -78,120 +78,56 @@ export function useArcKit() {
   const arcClient = usePublicClient({ chainId: arcTestnet.id });
   const sepoliaClient = usePublicClient({ chainId: sepolia.id });
 
-  const resolveRef = useRef(null);
-  const rejectRef  = useRef(null);
-  const [watchHash,  setWatchHash]  = useState(undefined);
-  const [watchChain, setWatchChain] = useState(arcTestnet.id);
-
-  const {
-    isLoading: isWaiting,
-    isSuccess,
-    isError,
-    data: receipt,
-    error: receiptError
-  } = useWaitForTransactionReceipt({
-    hash:    watchHash,
-    chainId: watchChain,
-    query:   { enabled: !!watchHash, staleTime: 0 },
-  });
-
-  // When the receipt arrives (success or error), resolve/reject the pending promise
-  useEffect(() => {
-    if (!watchHash) return;
-
-    if (isSuccess && receipt) {
-      const resolve = resolveRef.current;
-      resolveRef.current = null;
-      rejectRef.current  = null;
-      setWatchHash(undefined);
-      resolve?.(receipt);
-    } else if (isError) {
-      const reject = rejectRef.current;
-      resolveRef.current = null;
-      rejectRef.current  = null;
-      setWatchHash(undefined);
-      reject?.(receiptError ?? new Error("Transaction failed"));
-    }
-  }, [isSuccess, isError, receipt, receiptError, watchHash]);
-
-  // ── Core helper: submit tx and return a promise that resolves with receipt ─
-  // We pre-fetch the nonce from our own public client (publicnode.com) and
-  // pass it explicitly to writeContractAsync. This bypasses the wallet's
-  // internal eth_getTransactionCount call which hits Thirdweb by default.
-  // We also force a manual gas limit and robust gas prices to bypass estimation failures.
-  const submitAndWait = useCallback((params, cid = arcTestnet.id) => {
-    return new Promise(async (resolve, reject) => {
+  // ── Core helper: submit tx and return the hash immediately ──
+  const submitAndWait = useCallback(async (params, cid = arcTestnet.id) => {
+    try {
+      // Get nonce from OUR RPC with a strict 3s timeout to avoid hanging
+      let nonce;
       try {
-        // Get nonce from OUR RPC with a strict 3s timeout to avoid hanging
-        let nonce;
-        try {
-          const client = cid === sepolia.id ? sepoliaClient : arcClient;
-          nonce = await Promise.race([
-            client.getTransactionCount({ address, blockTag: 'pending' }),
-            new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))
-          ]);
-        } catch (e) {
-          console.warn(`[MiraRoute] Nonce fetch ${e?.message === 'timeout' ? 'timed out' : 'failed'}, using wallet default:`, e);
-          nonce = undefined;
-        }
-
-        const txParams = {
-          ...params,
-          gas: params.gas ?? 800000n,
-        };
-
-        // Aggressive gas pricing for Arc (EIP-1559 only)
-        if (cid === arcTestnet.id) {
-          txParams.maxFeePerGas = parseUnits("1000", "gwei");
-          txParams.maxPriorityFeePerGas = parseUnits("100", "gwei");
-        }
-
-        if (nonce !== undefined) txParams.nonce = nonce;
-
-        console.log(`[MiraRoute] Attempting wallet push: ${params.functionName}`, txParams);
-        
-        // Brief delay for wallet state to settle (especially after chain switch)
-        await new Promise(r => setTimeout(r, 1000));
-
-        const hash = await writeContractAsync(txParams);
-        console.log(`[MiraRoute] Wallet accepted! Hash: ${hash}`);
-        
-        resolveRef.current = resolve;
-        rejectRef.current  = reject;
-        setWatchChain(cid);
-        setWatchHash(hash);
-      } catch (err) {
-        console.error("[MiraRoute] Wallet push failed:", err);
-        reject(err);
+        const client = cid === sepolia.id ? sepoliaClient : arcClient;
+        nonce = await Promise.race([
+          client.getTransactionCount({ address, blockTag: 'pending' }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000))
+        ]);
+      } catch (e) {
+        console.warn(`[MiraRoute] Nonce fetch ${e?.message === 'timeout' ? 'timed out' : 'failed'}, using wallet default:`, e);
+        nonce = undefined;
       }
-    });
+
+      const txParams = {
+        ...params,
+        gas: params.gas ?? 800000n,
+      };
+
+      // Aggressive gas pricing for Arc (EIP-1559 only)
+      if (cid === arcTestnet.id) {
+        txParams.maxFeePerGas = parseUnits("1000", "gwei");
+        txParams.maxPriorityFeePerGas = parseUnits("100", "gwei");
+      }
+
+      if (nonce !== undefined) txParams.nonce = nonce;
+
+      console.log(`[MiraRoute] Attempting wallet push: ${params.functionName}`, txParams);
+      
+      // Brief delay for wallet state to settle
+      await new Promise(r => setTimeout(r, 1000));
+
+      const hash = await writeContractAsync(txParams);
+      console.log(`[MiraRoute] Wallet accepted! Hash: ${hash}`);
+      return hash;
+    } catch (err) {
+      console.error("[MiraRoute] Wallet push failed:", err);
+      throw err;
+    }
   }, [writeContractAsync, address, arcClient, sepoliaClient]);
-
-  // ── Helper: ensure allowance, approve if needed ───────────────────────────
-  const ensureApproval = useCallback(async ({ token, spender, amount, cid, onApproving }) => {
-    const allowance = await readContract(wagmiConfig, {
-      address: token, abi: erc20Abi, functionName: "allowance",
-      args: [address, spender], chainId: cid,
-    });
-    if (allowance >= amount) return;
-
-    onApproving?.();
-    const receipt = await submitAndWait({
-      address: token, abi: erc20Abi, functionName: "approve",
-      args: [spender, amount],
-    }, cid);
-    if (receipt.status !== "success") throw new Error("Token approval failed on-chain.");
-  }, [address, submitAndWait]);
 
   // ── approve ──────────────────────────────────────────────────────────────
   const approve = useCallback(async ({ token, spender, amount, cid }) => {
     const amountRaw = typeof amount === "string" ? parseUnits(amount, 6) : amount;
-    const receipt = await submitAndWait({
+    return await submitAndWait({
       address: token, abi: erc20Abi, functionName: "approve",
       args: [spender, amountRaw],
     }, cid);
-    if (receipt.status !== "success") throw new Error("Token approval failed on-chain.");
-    return receipt;
   }, [submitAndWait]);
 
   // ── quote (read-only, no wallet needed) ──────────────────────────────────
@@ -224,105 +160,84 @@ export function useArcKit() {
     const amountRaw = parseUnits(amountIn.toString(), 6);
     const cid       = arcTestnet.id;
 
-    const swapReceipt = await submitAndWait({
+    const hash = await submitAndWait({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "swap",
       args: [COIN_INDEX[tokenIn], COIN_INDEX[tokenOut], amountRaw],
     }, cid);
 
-    console.log("[MiraRoute] swap confirmed:", swapReceipt.transactionHash);
-    return { txHash: swapReceipt.transactionHash };
+    return { txHash: hash };
   }, [isConnected, address, chainId, switchChainAsync, submitAndWait]);
 
   // ── addLiquidity ──────────────────────────────────────────────────────────
-  const addLiquidity = useCallback(async ({ usdcAmt, eurcAmt, onProgress }) => {
+  const addLiquidity = useCallback(async ({ usdcAmt, eurcAmt }) => {
     if (!isConnected || !address) throw new Error("Wallet not connected");
 
     if (chainId !== CHAIN.ARC_TESTNET_ID) {
-      await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
-      await new Promise(r => setTimeout(r, 600));
+      console.log("[MiraRoute] Switching chain to Arc...");
+      try {
+        await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
+        await new Promise(r => setTimeout(r, 1200));
+      } catch (err) {
+        console.warn("[MiraRoute] Chain switch failed or cancelled:", err);
+      }
     }
 
     const usdcRaw = usdcAmt > 0 ? parseUnits(usdcAmt.toString(), 6) : 0n;
     const eurcRaw = eurcAmt > 0 ? parseUnits(eurcAmt.toString(), 6) : 0n;
-    if (usdcRaw === 0n && eurcRaw === 0n) throw new Error("Enter at least one amount");
-
     const cid = arcTestnet.id;
 
-    onProgress?.("depositing");
-    const receipt = await submitAndWait({
+    const hash = await submitAndWait({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "addLiquidity",
       args: [[usdcRaw, eurcRaw, 0n]],
     }, cid);
 
-    if (receipt.status !== "success") throw new Error("Add liquidity reverted on-chain.");
-    console.log("[MiraRoute] addLiquidity confirmed:", receipt.transactionHash);
-    return { txHash: receipt.transactionHash };
+    return { txHash: hash };
   }, [isConnected, address, chainId, switchChainAsync, submitAndWait]);
 
   // ── removeLiquidity ───────────────────────────────────────────────────────
-  const removeLiquidity = useCallback(async ({ lpAmt, onProgress }) => {
+  const removeLiquidity = useCallback(async ({ lpAmt }) => {
     if (!isConnected || !address) throw new Error("Wallet not connected");
-
-    if (chainId !== CHAIN.ARC_TESTNET_ID) {
-      await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
-      await new Promise(r => setTimeout(r, 600));
-    }
-
-    const cid   = arcTestnet.id;
-    const lpRaw = parseUnits(lpAmt.toString(), 18);
-
-    onProgress?.("withdrawing");
-    const receipt = await submitAndWait({
+    const lpRaw = parseUnits(lpAmt.toString(), 6);
+    const hash = await submitAndWait({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "remove_liquidity",
       args: [lpRaw, [0n, 0n, 0n]],
-    }, cid);
+    }, arcTestnet.id);
+    return { txHash: hash };
+  }, [isConnected, address, submitAndWait]);
 
-    if (receipt.status !== "success") throw new Error("Remove liquidity reverted on-chain.");
-    console.log("[MiraRoute] removeLiquidity confirmed:", receipt.transactionHash);
-    return { txHash: receipt.transactionHash };
-  }, [isConnected, address, chainId, switchChainAsync, submitAndWait]);
-
-  // ── bridge (Sepolia → Arc via CCTP v2) ───────────────────────────────────
+  // ── bridge (Circle CCTP) ─────────────────────────────────────────────────
   const bridge = useCallback(async ({ amount, onProgress }) => {
     if (!isConnected || !address) throw new Error("Wallet not connected");
 
-    if (chainId !== CHAIN.SEPOLIA_ID) {
-      onProgress?.({ step: 0, label: "Switching to Ethereum Sepolia…" });
+    // Step 1: Switch to Sepolia
+    if (chainId !== sepolia.id) {
+      console.log("[MiraRoute] Switching chain to Sepolia...");
       try {
-        await switchChainAsync({ chainId: CHAIN.SEPOLIA_ID });
-        await new Promise(r => setTimeout(r, 1000));
-      } catch (switchErr) {
-        const msg = String(switchErr?.message ?? '');
-        if (
-          msg.toLowerCase().includes('programmatic chain switching') ||
-          msg.toLowerCase().includes('does not support')
-        ) {
-          // Wallet like Rabby blocks programmatic switching — tell the UI
-          const err = new Error('CHAIN_SWITCH_REQUIRED');
-          err.code = 'CHAIN_SWITCH_REQUIRED';
-          err.requiredChainId = CHAIN.SEPOLIA_ID;
-          throw err;
-        }
-        throw switchErr; // Unknown error — re-throw normally
+        await switchChainAsync({ chainId: sepolia.id });
+        await new Promise(r => setTimeout(r, 1200));
+      } catch (err) {
+        console.warn("[MiraRoute] Chain switch failed or cancelled:", err);
       }
     }
 
     const amountRaw = parseUnits(amount.toString(), 6);
     const sepoliaId = sepolia.id;
 
-    // Execution ONLY — allowance must be pre-handled by UI
+    // Step 2: Lock on Sepolia
     onProgress?.(2);
-    const mintRecipient = `0x${address.slice(2).padStart(64, "0")}`;
-    const burnReceipt = await submitAndWait({
+    const hash = await submitAndWait({
       address: CCTP.TOKEN_MESSENGER, abi: TOKEN_MESSENGER_ABI,
       functionName: "depositForBurn",
-      args: [amountRaw, CCTP.ARC_DOMAIN, mintRecipient,
+      args: [amountRaw, CCTP.ARC_DOMAIN, `0x${address.slice(2).padStart(64, "0")}`,
              TOKENS.USDC_SEPOLIA.address, ZERO_BYTES32, 0n, 1000],
     }, sepoliaId);
-    const burnTxHash = burnReceipt.transactionHash;
-    console.log("[MiraRoute] burn tx:", burnTxHash);
 
-    // Step 3 — poll Circle attestation
+    console.log("[MiraRoute] Waiting for Sepolia lock confirmation...", hash);
+    const burnReceipt = await sepoliaClient.waitForTransactionReceipt({ hash });
+    const burnTxHash = burnReceipt.transactionHash;
+    console.log("[MiraRoute] burn tx confirmed:", burnTxHash);
+
+    // Step 3: Poll Circle attestation
     onProgress?.(3);
     let attestationMsg = null;
     for (let k = 0; k < 72; k++) {
@@ -338,20 +253,23 @@ export function useArcKit() {
     }
     if (!attestationMsg) throw new Error("Attestation timed out. Check ArcScan for mint status.");
 
-    // Step 4 — switch to Arc + receiveMessage
+    // Step 4: Switch to Arc + receiveMessage (Mint)
     onProgress?.(4);
     await switchChainAsync({ chainId: CHAIN.ARC_TESTNET_ID });
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 1200));
 
-    const mintReceipt = await submitAndWait({
+    const mintHash = await submitAndWait({
       address: CCTP.MESSAGE_TRANSMITTER, abi: MESSAGE_TRANSMITTER_ABI,
       functionName: "receiveMessage",
       args: [attestationMsg.message, attestationMsg.attestation],
     }, arcTestnet.id);
 
-    console.log("[MiraRoute] mint tx:", mintReceipt.transactionHash);
+    console.log("[MiraRoute] Waiting for Arc mint confirmation...", mintHash);
+    const mintReceipt = await arcClient.waitForTransactionReceipt({ hash: mintHash });
+
+    console.log("[MiraRoute] mint confirmed:", mintReceipt.transactionHash);
     return { txHash: mintReceipt.transactionHash, burnTxHash };
-  }, [isConnected, address, chainId, switchChainAsync, ensureApproval, submitAndWait]);
+  }, [isConnected, address, chainId, switchChainAsync, submitAndWait, sepoliaClient, arcClient]);
 
   return {
     submitAndWait,
@@ -362,7 +280,6 @@ export function useArcKit() {
     removeLiquidity,
     bridge,
     isWritePending,
-    isWaiting,
     writeError,
     resetWrite,
   };
