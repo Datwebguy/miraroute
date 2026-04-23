@@ -3,7 +3,7 @@ import { injected, walletConnect, coinbaseWallet } from "wagmi/connectors";
 import { sepolia } from "wagmi/chains";
 import { arcTestnet, CHAIN } from "./utils/constants";
 
-const PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
+const PROJECT_ID = "90d28d1de572e2ba686529c2035d69ca";
 
 // ── Connectors ────────────────────────────────────────────────────────────────
 const connectors = [
