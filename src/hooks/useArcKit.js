@@ -6,7 +6,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { readContract, getPublicClient } from "@wagmi/core";
+import { readContract } from "@wagmi/core";
 import { parseUnits, formatUnits, erc20Abi } from "viem";
 import { sepolia } from "wagmi/chains";
 import { wagmiConfig } from "../wagmi";
@@ -105,35 +105,23 @@ export function useArcKit() {
   }, [isSuccess, isError, receipt, receiptError, watchHash]);
 
   // ── Core helper: submit tx and return a promise that resolves with receipt ─
+  // NOTE: We intentionally let the wallet handle nonce and gas estimation.
+  // Pre-fetching caused silent failures on the Arc testnet, especially on
+  // empty pools where gas estimation reverts. The wallet (MetaMask/WC) handles
+  // these correctly on its own.
   const submitAndWait = useCallback((params, cid = arcTestnet.id) => {
     return new Promise(async (resolve, reject) => {
       try {
-        // Bypass wallet RPC for estimation to prevent timeouts
-        const publicClient = getPublicClient(wagmiConfig, { chainId: cid });
-        const nonce = await publicClient.getTransactionCount({ address });
-        let gas;
-        try {
-          gas = await publicClient.estimateContractGas({ ...params, account: address });
-          gas = (gas * 120n) / 100n; // 20% buffer
-        } catch (e) {
-          console.warn("Gas estimation failed on public client, falling back to wallet estimation", e);
-        }
-
-        const txParams = { ...params, chainId: cid, nonce };
-        if (gas) txParams.gas = gas;
-
-        const hash = await writeContractAsync(txParams);
-        // Wire up the receipt watcher before setting the hash
+        const hash = await writeContractAsync({ ...params, chainId: cid });
         resolveRef.current = resolve;
         rejectRef.current  = reject;
         setWatchChain(cid);
         setWatchHash(hash);
       } catch (err) {
-        // User rejected wallet, or pre-flight error
         reject(err);
       }
     });
-  }, [writeContractAsync, address]);
+  }, [writeContractAsync]);
 
   // ── Helper: ensure allowance, approve if needed ───────────────────────────
   const ensureApproval = useCallback(async ({ token, spender, amount, cid, onApproving }) => {

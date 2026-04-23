@@ -127,23 +127,17 @@ export default function EarnView({ balances }) {
   const userUSDC  = balances?.USDC ?? 0;
   const userEURC  = balances?.EURC ?? 0;
 
-  // Pool ratio for auto-calculation (falls back to 1:1 if pool not loaded yet)
-  const ratio = poolUSDC > 0 && poolEURC > 0 ? poolEURC / poolUSDC : 1;
+  // Pool ratio (only used for UI display, NOT forced on inputs)
+  // Since this is a stableswap pool, users can supply tokens in any ratio.
+  // We used to auto-fill the paired amount, but this forced 1:1 on empty pools.
+  const ratio = poolUSDC > 0 && poolEURC > 0 ? poolEURC / poolUSDC : null;
 
   const handleUsdcChange = (val) => {
-    setLastEdited('usdc');
     setUsdcAmt(val);
-    const n = parseFloat(val);
-    if (val === '' || isNaN(n) || n === 0) { setEurcAmt(''); return; }
-    setEurcAmt((n * ratio).toFixed(6).replace(/\.?0+$/, ''));
   };
 
   const handleEurcChange = (val) => {
-    setLastEdited('eurc');
     setEurcAmt(val);
-    const n = parseFloat(val);
-    if (val === '' || isNaN(n) || n === 0) { setUsdcAmt(''); return; }
-    setUsdcAmt((n / ratio).toFixed(6).replace(/\.?0+$/, ''));
   };
 
   const usdcNum   = parseFloat(usdcAmt) || 0;
@@ -233,7 +227,7 @@ export default function EarnView({ balances }) {
           </p>
         </div>
         <div className="flex gap-3 shrink-0">
-          <StatCard label="Pool TVL" value={tvlUSD > 0 ? tvlFmt(tvlUSD) : 'Loading…'}/>
+          <StatCard label="Pool TVL" value={poolUSDCRaw == null ? 'Loading…' : tvlUSD > 0 ? tvlFmt(tvlUSD) : '$0.00'}/>
           <StatCard label="APY" value={APY.toFixed(1) + '%'} accent/>
           <StatCard label="Fee" value={FEE.toFixed(2) + '%'}/>
         </div>
