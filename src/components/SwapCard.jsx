@@ -208,6 +208,17 @@ export default function SwapCard({
   const [swapStep,    setSwapStep]   = useState('idle');
   const [approveHash, setApproveHash] = useState(undefined);
 
+  const fromT      = getToken(fromSym);
+  const toT        = getToken(toSym);
+  const isLivePair = fromT.live && toT.live;
+  const amountNum  = parseFloat(amount) || 0;
+  const balance    = balances[fromSym] ?? 0;
+  const toBal      = balances[toSym]   ?? 0;
+  const amountOut  = amountNum * (fromT.price / toT.price) * 0.999;
+  const usdIn      = amountNum > 0 ? fmtUSD(amountNum * fromT.price) : '$0.00';
+  const usdOut     = amountNum > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
+  const insufficient = amountNum > balance && amountNum > 0;
+
   // ── Allowance Logic ────────────────────────────────────────────────────────
   const amountRaw = parseUnits(amount || "0", 6);
   const tokenAddress = fromSym === 'USDC' ? CONTRACTS.USDC : CONTRACTS.EURC;
@@ -233,17 +244,6 @@ export default function SwapCard({
   }, [approveSuccess, refetchAllowance]);
 
   const needsApproval = isConnected && amountNum > 0 && (allowance || 0n) < amountRaw;
-
-  const fromT      = getToken(fromSym);
-  const toT        = getToken(toSym);
-  const isLivePair = fromT.live && toT.live;
-  const amountNum  = parseFloat(amount) || 0;
-  const amountOut  = amountNum * (fromT.price / toT.price) * 0.999;
-  const balance    = balances[fromSym] ?? 0;
-  const toBal      = balances[toSym]   ?? 0;
-  const usdIn      = amountNum > 0 ? fmtUSD(amountNum * fromT.price) : '$0.00';
-  const usdOut     = amountNum > 0 ? fmtUSD(amountOut * toT.price)   : '$0.00';
-  const insufficient = amountNum > balance && amountNum > 0;
 
   // Circle SDK handles allowance internally via EIP-2612 Permit (off-chain sign, no gas tx)
 

@@ -58,6 +58,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
     query: { enabled: !!approveHash },
   });
 
+  const sepoliaBalance = rawBalance != null ? parseFloat(formatUnits(rawBalance, 6)) : null;
   const amtNum         = parseFloat(amt) || 0;
   const amtRaw         = parseUnits(amt || "0", 6);
   const needsApproval  = isConnected && amtNum > 0 && (allowance || 0n) < amtRaw;
