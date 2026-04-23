@@ -111,7 +111,7 @@ export function useArcKit() {
   // We pre-fetch the nonce from our own public client (publicnode.com) and
   // pass it explicitly to writeContractAsync. This bypasses the wallet's
   // internal eth_getTransactionCount call which hits Thirdweb by default.
-  // We also force a manual gas limit to bypass estimation failures.
+  // We also force a manual gas limit and robust gas prices to bypass estimation failures.
   const submitAndWait = useCallback((params, cid = arcTestnet.id) => {
     return new Promise(async (resolve, reject) => {
       try {
@@ -128,8 +128,15 @@ export function useArcKit() {
         const txParams = {
           ...params,
           chainId: cid,
-          gas: params.gas ?? 500000n, // Bypass gas estimation failures
+          gas: params.gas ?? 500000n,
         };
+
+        // Arc Testnet specific gas price floor to jump the queue
+        if (cid === arcTestnet.id) {
+          txParams.maxFeePerGas = parseUnits("1000", "gwei");
+          txParams.maxPriorityFeePerGas = parseUnits("50", "gwei");
+        }
+
         if (nonce !== undefined) txParams.nonce = nonce;
 
         const hash = await writeContractAsync(txParams);
@@ -159,6 +166,17 @@ export function useArcKit() {
     if (receipt.status !== "success") throw new Error("Token approval failed on-chain.");
   }, [address, submitAndWait]);
 
+  // ── approve ──────────────────────────────────────────────────────────────
+  const approve = useCallback(async ({ token, spender, amount, cid }) => {
+    const amountRaw = typeof amount === "string" ? parseUnits(amount, 6) : amount;
+    const receipt = await submitAndWait({
+      address: token, abi: erc20Abi, functionName: "approve",
+      args: [spender, amountRaw],
+    }, cid);
+    if (receipt.status !== "success") throw new Error("Token approval failed on-chain.");
+    return receipt;
+  }, [submitAndWait]);
+
   // ── quote (read-only, no wallet needed) ──────────────────────────────────
   const quote = useCallback(async ({ tokenIn, tokenOut, amountIn }) => {
     if (!amountIn || parseFloat(amountIn) <= 0) return null;
@@ -184,12 +202,6 @@ export function useArcKit() {
     const amountRaw = parseUnits(amountIn.toString(), 6);
     const cid       = arcTestnet.id;
 
-    await ensureApproval({
-      token: CONTRACTS[tokenIn], spender: STABLE_SWAP_POOL,
-      amount: amountRaw, cid,
-      onApproving: () => onProgress?.("approving"),
-    });
-
     onProgress?.("swapping");
     const swapReceipt = await submitAndWait({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "swap",
@@ -202,7 +214,7 @@ export function useArcKit() {
 
     console.log("[MiraRoute] swap confirmed:", swapReceipt.transactionHash);
     return { txHash: swapReceipt.transactionHash };
-  }, [isConnected, address, chainId, switchChainAsync, ensureApproval, submitAndWait]);
+  }, [isConnected, address, chainId, switchChainAsync, submitAndWait]);
 
   // ── addLiquidity ──────────────────────────────────────────────────────────
   const addLiquidity = useCallback(async ({ usdcAmt, eurcAmt, onProgress }) => {
@@ -219,19 +231,6 @@ export function useArcKit() {
 
     const cid = arcTestnet.id;
 
-    if (usdcRaw > 0n) {
-      await ensureApproval({
-        token: CONTRACTS.USDC, spender: STABLE_SWAP_POOL, amount: usdcRaw, cid,
-        onApproving: () => onProgress?.("approving-usdc"),
-      });
-    }
-    if (eurcRaw > 0n) {
-      await ensureApproval({
-        token: CONTRACTS.EURC, spender: STABLE_SWAP_POOL, amount: eurcRaw, cid,
-        onApproving: () => onProgress?.("approving-eurc"),
-      });
-    }
-
     onProgress?.("depositing");
     const receipt = await submitAndWait({
       address: STABLE_SWAP_POOL, abi: STABLE_SWAP_ABI, functionName: "addLiquidity",
@@ -241,7 +240,7 @@ export function useArcKit() {
     if (receipt.status !== "success") throw new Error("Add liquidity reverted on-chain.");
     console.log("[MiraRoute] addLiquidity confirmed:", receipt.transactionHash);
     return { txHash: receipt.transactionHash };
-  }, [isConnected, address, chainId, switchChainAsync, ensureApproval, submitAndWait]);
+  }, [isConnected, address, chainId, switchChainAsync, submitAndWait]);
 
   // ── removeLiquidity ───────────────────────────────────────────────────────
   const removeLiquidity = useCallback(async ({ lpAmt, onProgress }) => {
@@ -294,15 +293,7 @@ export function useArcKit() {
     const amountRaw = parseUnits(amount.toString(), 6);
     const sepoliaId = sepolia.id;
 
-    // Step 1 — approve USDC on Sepolia
-    onProgress?.(1);
-    await ensureApproval({
-      token: TOKENS.USDC_SEPOLIA.address, spender: CCTP.TOKEN_MESSENGER,
-      amount: amountRaw, cid: sepoliaId,
-      onApproving: () => {},
-    });
-
-    // Step 2 — depositForBurn
+    // Execution ONLY — allowance must be pre-handled by UI
     onProgress?.(2);
     const mintRecipient = `0x${address.slice(2).padStart(64, "0")}`;
     const burnReceipt = await submitAndWait({
@@ -345,5 +336,13 @@ export function useArcKit() {
     return { txHash: mintReceipt.transactionHash, burnTxHash };
   }, [isConnected, address, chainId, switchChainAsync, ensureApproval, submitAndWait]);
 
-  return { swap, bridge, quote, addLiquidity, removeLiquidity, isReady: isConnected };
+  return {
+    submitAndWait,
+    approve,
+    quote,
+    swap,
+    addLiquidity,
+    removeLiquidity,
+    bridge,
+  };
 }

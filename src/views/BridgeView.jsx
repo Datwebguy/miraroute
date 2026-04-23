@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useAccount, useReadContract, useChainId } from "wagmi";
+import { useAccount, useReadContract, useChainId, useWaitForTransactionReceipt } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { erc20Abi, formatUnits } from "viem";
+import { erc20Abi, formatUnits, parseUnits } from "viem";
 import { Icons, TokenLogo } from "../components/Icons";
 import { fmt, fmtUSD } from "../utils/tokens";
-import { getTxUrl } from "../utils/constants";
+import { getTxUrl, CCTP } from "../utils/constants";
 
 // Sepolia USDC balance read (display only — approval handled inside useArcKit.bridge)
 const SEPOLIA_USDC     = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
@@ -29,6 +29,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
   const [bridgeErr,      setBridgeErr]      = useState(null);
   const [mintHash,       setMintHash]       = useState(null);
   const [burnHash,       setBurnHash]       = useState(null);
+  const [approveHash,    setApproveHash]    = useState(undefined);
   const [needManualSwitch, setNeedManualSwitch] = useState(false);
 
   const wrongChain = isConnected && chainId !== SEPOLIA_CHAIN_ID && step === 0;
@@ -40,11 +41,34 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
     functionName: "balanceOf",
     args:     address ? [address] : undefined,
     chainId:  SEPOLIA_CHAIN_ID,
-    query:    { enabled: !!address, refetchInterval: 12000, retry: 3, retryDelay: 1500 },
+    query:    { enabled: !!address, refetchInterval: 12000 },
   });
 
-  const sepoliaBalance = rawBalance != null ? parseFloat(formatUnits(rawBalance, 6)) : null;
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address:  SEPOLIA_USDC,
+    abi:      erc20Abi,
+    functionName: "allowance",
+    args:     address ? [address, CCTP.TOKEN_MESSENGER] : undefined,
+    chainId:  SEPOLIA_CHAIN_ID,
+    query:    { enabled: !!address, staleTime: 0 },
+  });
+
+  const { isLoading: isApproving, isSuccess: approveSuccess } = useWaitForTransactionReceipt({
+    hash: approveHash,
+    query: { enabled: !!approveHash },
+  });
+
   const amtNum         = parseFloat(amt) || 0;
+  const amtRaw         = parseUnits(amt || "0", 6);
+  const needsApproval  = isConnected && amtNum > 0 && (allowance || 0n) < amtRaw;
+
+  // React to approval success
+  useEffect(() => {
+    if (approveSuccess) {
+      setApproveHash(undefined);
+      refetchAllowance();
+    }
+  }, [approveSuccess, refetchAllowance]);
   const receiveAmt     = amtNum * 0.998;
   const fee            = 1.20;
   const insufficient   = sepoliaBalance != null && amtNum > 0 && amtNum > sepoliaBalance;
@@ -52,6 +76,22 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
 
   const startBridge = async () => {
     if (!canBridge) return;
+
+    if (needsApproval) {
+      try {
+        const receipt = await arcKit.approve({
+          token: SEPOLIA_USDC,
+          spender: CCTP.TOKEN_MESSENGER,
+          amount: amtRaw,
+          cid: SEPOLIA_CHAIN_ID
+        });
+        setApproveHash(receipt.transactionHash);
+      } catch (err) {
+        setBridgeErr(err?.message || "Approval failed");
+      }
+      return;
+    }
+
     setBridgeErr(null);
     setMintHash(null);
     setBurnHash(null);
@@ -323,15 +363,15 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
           <button onClick={openConnectModal}
                   className="w-full py-4 rounded-2xl font-semibold text-[14.5px] grad-btn">
             Connect Wallet
-          </button>
-        ) : step > 0 && step < 4 ? (
-          <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14.5px] relative overflow-hidden shimmer text-[#07261F]">
-            <span className="relative z-10 flex items-center justify-center gap-2">
-              <span className="inline-block w-4 h-4 border-2 border-[#07261F]/60 border-t-transparent rounded-full spin-slow"/>
-              {step === 1 ? 'Approving USDC…' : step === 2 ? 'Locking on Sepolia…' : step === 3 ? 'Waiting for attestation…' : 'Minting on Arc…'}
-            </span>
-          </button>
-        ) : (
+      </button>
+    ) : (isApproving || (step > 0 && step < 4)) ? (
+      <button disabled className="w-full py-4 rounded-2xl font-semibold text-[14.5px] relative overflow-hidden shimmer text-[#07261F]">
+        <span className="relative z-10 flex items-center justify-center gap-2">
+          <span className="inline-block w-4 h-4 border-2 border-[#07261F]/60 border-t-transparent rounded-full spin-slow"/>
+          {isApproving ? 'Waiting for Approval…' : step === 1 ? 'Locking on Sepolia…' : step === 2 ? 'Waiting for attestation…' : 'Minting on Arc…'}
+        </span>
+      </button>
+    ) : (
           <button onClick={startBridge}
                   disabled={!canBridge}
                   className={`w-full py-4 rounded-2xl font-semibold text-[14.5px] tracking-tight transition-all ${
@@ -345,7 +385,7 @@ export default function BridgeView({ onToast, onBridge, arcKit }) {
               : !amtNum ? 'Enter an amount' : (
               <span className="flex items-center justify-center gap-2">
                 <Icons.ArrowDown size={15} stroke="currentColor" className="-rotate-90"/>
-                Bridge USDC to Arc (CCTP)
+                {needsApproval ? `Approve USDC` : `Bridge USDC to Arc (CCTP)`}
               </span>
             )}
           </button>

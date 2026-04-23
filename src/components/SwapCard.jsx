@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract, useWaitForTransactionReceipt } from "wagmi";
+import { erc20Abi, parseUnits } from "viem";
 import { Icons, TokenLogo } from "./Icons";
 import { getToken, fmt, fmtUSD } from "../utils/tokens";
 import { FastModeBadge } from "./RoutePreview";
 import RoutePreview from "./RoutePreview";
 import { useArcKit } from "../hooks/useArcKit";
+import { STABLE_SWAP_POOL, CONTRACTS } from "../utils/constants";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -204,8 +206,34 @@ export default function SwapCard({
   const [isExecuting, setIsExecuting] = useState(false);
   // 'idle' | 'approving' | 'swapping' | 'confirming'
   const [swapStep,    setSwapStep]   = useState('idle');
+  const [approveHash, setApproveHash] = useState(undefined);
 
-  // ── display values ────────────────────────────────────────────────────────────
+  // ── Allowance Logic ────────────────────────────────────────────────────────
+  const amountRaw = parseUnits(amount || "0", 6);
+  const tokenAddress = fromSym === 'USDC' ? CONTRACTS.USDC : CONTRACTS.EURC;
+
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: [address, STABLE_SWAP_POOL],
+    query: { enabled: !!address, staleTime: 0 },
+  });
+
+  const { isLoading: isApproving, isSuccess: approveSuccess } = useWaitForTransactionReceipt({
+    hash: approveHash,
+    query: { enabled: !!approveHash },
+  });
+
+  useEffect(() => {
+    if (approveSuccess) {
+      setApproveHash(undefined);
+      refetchAllowance();
+    }
+  }, [approveSuccess, refetchAllowance]);
+
+  const needsApproval = isConnected && amountNum > 0 && (allowance || 0n) < amountRaw;
+
   const fromT      = getToken(fromSym);
   const toT        = getToken(toSym);
   const isLivePair = fromT.live && toT.live;
@@ -223,6 +251,23 @@ export default function SwapCard({
   // arcKit.swap() internally calls the Circle API with proper auth + encoding,
   // then submits via walletClient.writeContract() → eth_sendTransaction.
   const runSwap = async () => {
+    if (needsApproval) {
+      setIsExecuting(true);
+      try {
+        const receipt = await arcKit.approve({
+          token: tokenAddress,
+          spender: STABLE_SWAP_POOL,
+          amount: amountRaw,
+          cid: 5042002,
+        });
+        setApproveHash(receipt.transactionHash);
+      } catch (err) {
+        setSwapError(err?.message || "Approval failed");
+        setIsExecuting(false);
+      }
+      return;
+    }
+
     setIsExecuting(true);
     setSwapStep('idle');
     setSwapError(null);
@@ -234,7 +279,6 @@ export default function SwapCard({
         onProgress: (step) => setSwapStep(step),
       });
 
-      // result.txHash is only set after on-chain receipt.status === 'success'
       const txHash = result?.txHash ?? null;
       console.log('[MiraRoute] swap confirmed on-chain:', txHash);
 
@@ -286,7 +330,8 @@ export default function SwapCard({
     : !isLivePair && amountNum > 0 ? 'Demo only — Live swaps need USDC or EURC'
     : amountNum === 0              ? 'Enter an amount'
     : insufficient                 ? `Insufficient ${fromSym}`
-    : swapStep === 'approving'     ? `Approving ${fromSym}…`
+    : isApproving                  ? `Waiting for Approval…`
+    : needsApproval                ? `Approve ${fromSym}`
     : swapStep === 'swapping'      ? 'Confirm Swap in Wallet…'
     : swapStep === 'confirming'    ? 'Waiting for Confirmation…'
     : isExecuting                  ? 'Processing…'
