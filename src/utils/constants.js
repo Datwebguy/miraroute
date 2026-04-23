@@ -70,7 +70,7 @@ export const CONTRACTS = {
 // Verified StableSwapPool on Arc Testnet
 // Confirmed via: https://testnet.arcscan.app/tx/0x8cd92b0155bae9479c98d3e613e39cd893787f99d4529a54d56c61ef5508e926
 // coins[0] = USDC (i=0), coins[1] = EURC (i=1)
-export const STABLE_SWAP_POOL = '0x2F4490e7c6F3DaC23ffEe6e71bFcb5d1CCd7d4eC';
+export const STABLE_SWAP_POOL = '0x8c54b8A819b48EaAC277B1634792acCBE9E6219F'; // DEPLOYED LIVE
 
 // Backwards-compatible alias
 export const CURVE_USDC_EURC_POOL = STABLE_SWAP_POOL;
