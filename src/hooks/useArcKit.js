@@ -111,6 +111,7 @@ export function useArcKit() {
   // We pre-fetch the nonce from our own public client (publicnode.com) and
   // pass it explicitly to writeContractAsync. This bypasses the wallet's
   // internal eth_getTransactionCount call which hits Thirdweb by default.
+  // We also force a manual gas limit to bypass estimation failures.
   const submitAndWait = useCallback((params, cid = arcTestnet.id) => {
     return new Promise(async (resolve, reject) => {
       try {
@@ -124,7 +125,11 @@ export function useArcKit() {
           nonce = undefined;
         }
 
-        const txParams = { ...params, chainId: cid };
+        const txParams = {
+          ...params,
+          chainId: cid,
+          gas: params.gas ?? 500000n, // Bypass gas estimation failures
+        };
         if (nonce !== undefined) txParams.nonce = nonce;
 
         const hash = await writeContractAsync(txParams);
